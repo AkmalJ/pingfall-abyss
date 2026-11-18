@@ -10,6 +10,11 @@
     --panel:rgba(6,24,30,.88); --panel-edge:rgba(46,230,200,.35); --bad:#ff4d6d; --warn:#ffb84d;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
+  /* No text selection anywhere in the game UI: drag-rotating the hangar sub
+     used to highlight the hint text at the bottom. Drag surfaces also ignore
+     browser touch gestures, so a drag stays a drag. */
+  body, body *{-webkit-user-select:none; user-select:none;}
+  #gl, .hangar-stage{touch-action:none;}
   html,body{width:100%;height:100%;overflow:hidden;background:#02090d;}
   body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);}
   #gl{position:fixed;inset:0;display:block;}

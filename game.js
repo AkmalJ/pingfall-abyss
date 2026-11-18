@@ -13,7 +13,7 @@ const CONFIG = {
            'hunter','hunter-brute','hunter-sentry','decoy','crystal','gate','torpedo'],
   assetSize: { 'sub-minnow':7,'sub-barracuda':8,'sub-mule':8.5,'sub-phantom':8,'sub-leviathan':11,
                'hunter':6.5,'hunter-brute':9,'hunter-sentry':6,'decoy':1.8,'crystal':3.2,'gate':30,'torpedo':2.4 },
-  assetYawFix: {}, // e.g. { 'hunter': Math.PI } if a GLB's nose points -Z instead of +Z
+  assetYawFix: { 'hunter': -Math.PI / 2 }, // per-model GLB facing fix, applied on the loader wrap so it survives the movement lookAt. 'hunter' was authored head-at-+X (angler lure + jaw at +X, tail fin at -X — verified against the geometry), so -90° puts its face on +Z like the movement/swim code assumes. 'hunter-brute' (head +Z) and 'hunter-sentry' (face +Z) verified correct as authored.
 
   // ---- sonar / noise / battery ----
   sonar: { baseRadius: 95, waveSpeed: 150, revealDur: 3.4, pingCost: 10,
@@ -220,6 +220,7 @@ const AudioSys = {
     this.growlOsc.connect(f); f.connect(this.growlGain); this.growlGain.connect(this.ctx.destination);
     this.growlOsc.start();
     Music.start();
+    Ambience.start();
     if (this.ctx.state !== 'running') this.armGestureResume();
   } catch(e) {} },
   // If the context was born suspended (autoplay policy / webview), interval-driven
@@ -264,6 +265,15 @@ const AudioSys = {
   gate(){ this.tone(523, 0.16, 'sine', 0.1); this.tone(784, 0.22, 'sine', 0.1, null, 0.13); },
   zap(){ this.tone(rand(760, 980), 0.06, 'square', 0.045, 190); },
   overheat(){ this.noiseBurst(0.28, 2600, 0.06); this.tone(220, 0.2, 'sawtooth', 0.05, 70); },
+  // ---- UI feedback: sonar-flavoured menu sounds, deliberately quiet (hover << click) ----
+  ui(kind){
+    if (!this.ctx || Music.muted()) return;
+    if (kind === 'hover') this.tone(1150, 0.05, 'sine', 0.016, 900);          // soft tick
+    else if (kind === 'back') this.tone(340, 0.11, 'sine', 0.05, 210);        // deeper negative blip
+    else if (kind === 'buy') this.coin();                                     // purchase confirm arpeggio
+    else if (kind === 'toggle') this.tone(760, 0.06, 'triangle', 0.045, 990); // pill / mute click
+    else this.tone(880, 0.09, 'sine', 0.05, 660);                             // 'click': sonar blip confirm
+  },
   setGrowl(level){ if (this.growlGain && this.ctx) { try { this.growlGain.gain.setTargetAtTime(clamp(level,0,0.14), this.ctx.currentTime, 0.15); } catch(e) {} } },
 };
 
@@ -593,6 +603,69 @@ const Music = {
   },
 };
 
+// ============================ UNDERWATER AMBIENCE ============================
+// A dive-only layer UNDER the music: a soft breathing water bed (looped noise
+// through a slowly-wandering lowpass + a deep rumble sine) plus sparse random
+// one-shots — rising bubble streams, a distant whale-like moan, sonar echoes
+// from nowhere. Deeper water biases the palette lower and sparser. NOT
+// duplicated here: hull creaks (Music.creak), crystal pickup (AudioSys.coin),
+// gate opening (AudioSys.gate), boss warning tone — those already exist.
+const Ambience = {
+  started: false, bedGain: null, nextShot: 0,
+  start(){
+    if (this.started || !AudioSys.ctx || !Music.noiseBuf) return;
+    const ctx = AudioSys.ctx;
+    try {
+      const src = ctx.createBufferSource(); src.buffer = Music.noiseBuf; src.loop = true; src.playbackRate.value = 0.32;
+      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 240;
+      this.bedGain = ctx.createGain(); this.bedGain.gain.value = 0;
+      src.connect(f); f.connect(this.bedGain); this.bedGain.connect(ctx.destination);
+      src.start();
+      const rum = ctx.createOscillator(); rum.type = 'sine'; rum.frequency.value = 44;
+      const rg = ctx.createGain(); rg.gain.value = 0.35; rum.connect(rg); rg.connect(this.bedGain); rum.start();
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.07;
+      const lg = ctx.createGain(); lg.gain.value = 90; lfo.connect(lg); lg.connect(f.frequency); lfo.start();
+      this.nextShot = ctx.currentTime + rand(4, 9);
+      setInterval(() => this.tick(), 400);
+      this.started = true;
+    } catch(e) {}
+  },
+  depth01(){ // 0 = bright shallows → 1 = the deep strata / last zones
+    if (!G) return 0;
+    if (G.mode === 'survival') return clamp(0.3 + (G.stratum || 0) * 0.14 + clamp(-player.group.position.y / 600, 0, 0.25), 0, 1);
+    const zi = G.zone ? CONFIG.zones.indexOf(G.zone) : 0;
+    return clamp((zi < 0 ? 0 : zi) / 4, 0, 1);
+  },
+  tick(){
+    if (!this.bedGain || !AudioSys.ctx) return;
+    const ctx = AudioSys.ctx, mode = Music.mode();
+    // bed follows the dive: full in a dive, ducked on pause/end screens, off in menus; mute wins over all
+    const target = Music.muted() ? 0 : mode === 'game' ? 0.034 : mode === 'duck' ? 0.016 : 0;
+    try { this.bedGain.gain.setTargetAtTime(target, ctx.currentTime, 1.4); } catch(e) {}
+    if (mode !== 'game' || Music.muted() || ctx.currentTime < this.nextShot) return;
+    this.shot();
+    this.nextShot = ctx.currentTime + rand(6, 18) * (1 + this.depth01() * 0.5);
+  },
+  shot(kind){
+    const deep = this.depth01();
+    const k = kind || pick(['bubbles', 'bubbles', 'whale', 'echo']);
+    try {
+      if (k === 'bubbles'){ // a rising stream of plops, each one higher than the last
+        const n = randi(3, 6), f0 = rand(500, 800) * (1 - deep * 0.25);
+        for (let i = 0; i < n; i++) AudioSys.tone(f0 * (1 + i * rand(0.12, 0.3)), 0.07, 'sine', 0.02, f0 * 1.8, i * rand(0.07, 0.13));
+      } else if (k === 'whale'){ // distant moan: a slow sine glide down + a faint harmonic (a sine at ~100 Hz needs no filter)
+        const f = rand(82, 120) * (1 - deep * 0.3);
+        AudioSys.tone(f, 2.6, 'sine', 0.035, f * 0.62);
+        AudioSys.tone(f * 1.5, 2.2, 'sine', 0.012, f * 0.9, 0.3);
+      } else { // 'echo': a sonar ping from nowhere, answered once, weaker
+        const f = rand(620, 760) * (1 - deep * 0.15);
+        AudioSys.tone(f, 0.8, 'sine', 0.022, f * 0.55);
+        AudioSys.tone(f, 0.7, 'sine', 0.01, f * 0.5, 0.55);
+      }
+    } catch(e) {}
+  }
+};
+
 // ============================ THREE SETUP ============================
 const canvas = document.getElementById('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
@@ -608,7 +681,7 @@ window.addEventListener('resize', ()=>{
 // Tries models/<name>.glb; falls back to a primitive placeholder.
 // Swapping in real GLBs later needs zero code changes.
 const glbCache = {};   // name -> normalized template Group | null
-function normalizeGLB(obj, target){
+function normalizeGLB(obj, target, name){
   const box = new THREE.Box3().setFromObject(obj);
   const size = new THREE.Vector3(); box.getSize(size);
   const maxDim = Math.max(size.x, size.y, size.z) || 1;
@@ -617,7 +690,8 @@ function normalizeGLB(obj, target){
   const c = new THREE.Vector3(); box2.getCenter(c);
   obj.position.sub(c);
   const wrap = new THREE.Group(); wrap.add(obj);
-  if (CONFIG.assetYawFix && CONFIG.assetYawFix['*']) wrap.rotation.y = CONFIG.assetYawFix['*'];
+  const yawFix = ((CONFIG.assetYawFix && CONFIG.assetYawFix['*']) || 0) + ((name && CONFIG.assetYawFix && CONFIG.assetYawFix[name]) || 0);
+  if (yawFix) wrap.rotation.y = yawFix;
   return wrap;
 }
 async function preloadAssets(){
@@ -627,7 +701,7 @@ async function preloadAssets(){
     const finish = v => { if (!done){ done = true; glbCache[name] = v; res(); } };
     const to = setTimeout(()=> finish(null), 4000);
     loader.load('models/' + name + '.glb',
-      g => { clearTimeout(to); try { finish(normalizeGLB(g.scene, CONFIG.assetSize[name])); } catch(e){ finish(null); } },
+      g => { clearTimeout(to); try { finish(normalizeGLB(g.scene, CONFIG.assetSize[name], name)); } catch(e){ finish(null); } },
       undefined,
       () => { clearTimeout(to); finish(null); });
   })));
@@ -723,7 +797,10 @@ function makeAsset(name){
   const tpl = glbCache[name];
   if (tpl){ const c = tpl.clone(true); g.add(c); g.userData.isGLB = true; }
   else { const ph = buildPlaceholder(name); g.add(ph); g.userData.accentMats = ph.userData.accentMats; g.userData.spin = ph.userData.spin; g.userData.body = ph.userData.body; g.userData.core = ph.userData.core; g.userData.ringMat = ph.userData.ringMat; g.userData.innerMat = ph.userData.innerMat; }
-  const yawFix = CONFIG.assetYawFix[name]; if (yawFix) g.rotation.y = yawFix;
+  // NOTE: per-model facing fixes (CONFIG.assetYawFix) are applied on the loader
+  // wrap inside normalizeGLB, NOT here — an outer-group rotation would be
+  // overwritten by the movement lookAt on hunters and would double-apply
+  // against the wrap for anything stationary.
   return g;
 }
 function setAccent(group, hex){
@@ -990,7 +1067,8 @@ function buildHangar(){
         d.className = 'sw' + (active ? ' sel' : '') + (ownedC ? '' : ' locked');
         d.style.background = hexCss(c.hex); d.title = c.name + (ownedC ? '' : ' · 🪙 ' + c.price);
         d.onclick = ()=>{
-          if (!ownedC){ if (SAVE.coins < c.price){ toast('Not enough coins'); return; } SAVE.coins -= c.price; SAVE.colorsOwned.push(c.id); }
+          if (!ownedC){ if (SAVE.coins < c.price){ toast('Not enough coins'); AudioSys.ui('back'); return; } SAVE.coins -= c.price; SAVE.colorsOwned.push(c.id); AudioSys.ui('buy'); }
+          else AudioSys.ui('click');
           SAVE.subColor[id] = c.id; persist(); buildHangar(); refreshHangarPreview();
           document.documentElement.style.setProperty('--accent', hexCss(c.hex));
         };
@@ -1050,6 +1128,7 @@ window.addEventListener('keydown', e => {
   } else if (uiState === 'paused' && (e.code === 'KeyP' || e.code === 'Escape')) resumeGame();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
+document.addEventListener('selectstart', e => e.preventDefault()); // belt-and-braces with the CSS: UI text is never selectable
 canvas.addEventListener('mousedown', () => {
   AudioSys.init();
   if (uiState === 'playing'){ if (pointerLocked){ if (G) G.cannonHeld = true; } else canvas.requestPointerLock(); }
@@ -1065,7 +1144,7 @@ document.addEventListener('mousemove', e => {
     player.yaw -= e.movementX * 0.0026;
     player.pitch = clamp(player.pitch - e.movementY * 0.0026, -1.15, 1.15);
   }
-  if (uiState === 'hangar' && hangarPreview && e.buttons === 1) hangarPreview.rotation.y += e.movementX * 0.01;
+  if (uiState === 'hangar' && hangarPreview && e.buttons === 1){ e.preventDefault(); hangarPreview.rotation.y += e.movementX * 0.01; }
 });
 // Wheel zoom for the hangar preview. This listens on window, not the canvas:
 // the .screen overlay always covers the canvas, so a canvas listener never
@@ -1106,10 +1185,21 @@ function tintRevealEntries(root, hex, amt){
   const c = new THREE.Color(hex);
   for (const e of rv.entries){ e.c.lerp(c, amt); if (e.e) e.e.lerp(c, amt * 0.7); }
 }
+// Depth fog (linear): full clarity inside FOG_NEAR, total murk at FOG_FAR.
+// The fog colour always equals the scene background (expedition: the zone's
+// fog tint; survival: the stratum tint, re-set on every stratum cross), so
+// distant geometry melts INTO the water instead of silhouetting against it —
+// the far field and the depths below read as murk, never as visible emptiness.
+// Linear, not FogExp2: an exp2 dense enough to erase ~110 units (≈0.02) would
+// also wash the 20–40 unit gameplay band down to ~50%; the linear ramp keeps
+// ≤40 units ≥87% visible while guaranteeing 0% at FOG_FAR. Visibility of an
+// object at distance d: (FOG_FAR − d) / (FOG_FAR − FOG_NEAR), clamped 0..1 —
+// 40 u → 87%, 65 u → 55%, 80 u → 36%, 95 u (base sonar edge) → 17%, ≥108 u → 0%.
+const FOG_NEAR = 30, FOG_FAR = 108;
 function baseGameScene(fogHex){
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(fogHex);
-  scene.fog = new THREE.FogExp2(fogHex, 0.0063);
+  scene.fog = new THREE.Fog(fogHex, FOG_NEAR, FOG_FAR);
   scene.add(new THREE.AmbientLight(0x99aabb, 0.5));
   const moon = new THREE.DirectionalLight(0x88aaff, 0.42); moon.position.set(30, 80, 20); scene.add(moon);
   return scene;
@@ -1290,8 +1380,8 @@ function spawnGate(scene, pos){
 // ============================ ENVIRONMENT & ATMOSPHERE ============================
 // Visual-only layer: glow sprites, marine snow, trench dressing.
 // Rebuilt per dive; updated once per frame from the main loop.
-const envFx = { kelp: [], pulses: [], snow: null, shaft: null };
-function resetEnvFx(){ envFx.kelp.length = 0; envFx.pulses.length = 0; envFx.snow = null; envFx.shaft = null; }
+const envFx = { kelp: [], pulses: [], snow: null, shaft: null, vents: [] };
+function resetEnvFx(){ envFx.kelp.length = 0; envFx.pulses.length = 0; envFx.snow = null; envFx.shaft = null; envFx.vents.length = 0; }
 
 let _glowTex = null;
 function glowTexture(){
@@ -1364,6 +1454,15 @@ function updateEnvironmentFx(dt){
     const s = 1 + Math.sin(t * p.speed + p.phase) * p.amp;
     p.s.scale.set(p.base * s, p.base * s, 1);
     p.s.material.opacity = clamp(p.baseO + Math.sin(t * p.speed + p.phase) * p.oAmp, 0.05, 0.9);
+  }
+  for (const v of envFx.vents){ // bubble vents: points rise and wrap inside their column
+    const a = v.pts.geometry.attributes.position;
+    for (let i = 0; i < a.count; i++){
+      let y = a.getY(i) + v.spd[i] * dt;
+      if (y > v.h) y -= v.h;
+      a.setY(i, y);
+    }
+    a.needsUpdate = true;
   }
   if (envFx.shaft) envFx.shaft.position.y = Math.round(pp.y / 50) * 50;
 }
@@ -1644,30 +1743,47 @@ function addFlora(g, zone){ // Expedition: coral clusters + kelp beds on the are
     for (let i = 0; i < n; i++) addKelp(g, kelpMat, c.x + rand(-7, 7), F - 2, c.z + rand(-7, 7), zone.tint.accent);
   }
 }
-function addSurvivalFlora(grp){ // Survival: coral on the shaft's inner ledges + a few kelp strands
+function addSurvivalFlora(grp, outcrops){ // Survival: coral on wall ledges AND mid-field outcrops + kelp forests
   const S = CONFIG.survival, geos = coralGeos();
   const dummy = new THREE.Object3D(), col = new THREE.Color();
   const palette = FLORA_PALETTE.map(h => new THREE.Color(h).lerp(new THREE.Color(0x7fe0ff), 0.35));
   const ledge = () => { const a = rand(0, Math.PI * 2), r = S.shaftRadius - rand(3, 9);
     return { x: Math.cos(a) * r, z: Math.sin(a) * r, y: -randi(0, 7) * 50 - rand(4, 46) }; };
+  let ocIdx = 0;
+  const spot = () => { // alternate: wall ledge / mid-field outcrop top (the near+mid field fill)
+    if (outcrops && outcrops.length && (ocIdx % 2 === 0)){
+      const o = outcrops[ocIdx % outcrops.length]; ocIdx++;
+      return { x: o.x + rand(-3, 3), z: o.z + rand(-3, 3), y: o.y - 0.4 };
+    }
+    ocIdx++; return ledge();
+  };
   const fill = (im, n, sMin, sMax) => {
     for (let i = 0; i < n; i++){
-      const p = ledge();
+      const p = spot();
       dummy.position.set(p.x, p.y, p.z);
       dummy.rotation.set(rand(-0.15, 0.15), rand(0, Math.PI * 2), rand(-0.15, 0.15));
-      const s = rand(sMin, sMax); dummy.scale.set(s, s, s);
+      const s = rand(sMin, sMax) * (p.y < -200 ? 1.35 : 1); // deeper = bigger silhouettes
+      dummy.scale.set(s, s, s);
       dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix);
       col.copy(pick(palette)).offsetHSL(0, 0, rand(-0.06, 0.06)); im.setColorAt(i, col);
     }
     im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
     grp.add(im);
   };
-  fill(coralMesh(geos.fan, 16, 0x2a7a8c, 0.3), 16, 0.9, 2.0);
-  fill(coralMesh(geos.stag, 16, 0x2a7a8c, 0.36), 16, 0.9, 2.0);
-  fill(coralMesh(geos.brain, 8, 0x2a7a8c, 0.22), 8, 0.9, 1.8);
+  fill(coralMesh(geos.fan, 36, 0x2a7a8c, 0.3), 36, 0.9, 2.0);
+  fill(coralMesh(geos.stag, 36, 0x2a7a8c, 0.36), 36, 0.9, 2.0);
+  fill(coralMesh(geos.brain, 24, 0x2a7a8c, 0.22), 24, 0.9, 1.8);
   const kelpMat = new THREE.MeshStandardMaterial({ color: 0x27573f, roughness: 0.6, metalness: 0.05,
     emissive: 0x14301f, emissiveIntensity: 0.35, side: THREE.DoubleSide, transparent: true, opacity: 0.92 });
-  for (let i = 0; i < 12; i++){ const p = ledge(); addKelp(grp, kelpMat, p.x, p.y, p.z, 0x7fe0ff); }
+  // kelp forests: clustered blades (3–5) rooted on outcrop tops + wall ledges —
+  // a 24-unit blade spans a whole floor, which is the water column's verticality.
+  const anchors = [];
+  if (outcrops) for (let i = 0; i < outcrops.length; i += 3) anchors.push({ x: outcrops[i].x, y: outcrops[i].y - 0.5, z: outcrops[i].z });
+  for (let i = 0; i < 3; i++){ const p = ledge(); anchors.push(p); }
+  for (const a of anchors){
+    const n = randi(3, 4);
+    for (let i = 0; i < n; i++) addKelp(grp, kelpMat, a.x + rand(-4, 4), a.y, a.z + rand(-4, 4), 0x7fe0ff);
+  }
 }
 function addDecor(scene, zone){
   resetEnvFx();
@@ -1706,14 +1822,82 @@ function addDecor(scene, zone){
   registerReveal(g, { min: 0.3 });
   addMarineSnow(scene);
 }
-// Survival shaft dressing: a periodic rock wall (50 m bands) that snaps along with the descent.
+// ---- survival set pieces (decoration only; merged primitives, shared materials) ----
+// One per floor, rotating vent → wreck → anemone. Placement keeps the descent
+// gate's cylinder clear (gate sits at r ≤ 62 with an 8.6 ring): pillars and
+// outcrops start at r ≥ 74, wrecks stay in a floor's upper half (the gate
+// plane is at floorTop − 20), anemones hug the wall at r ≥ 128.
+function makeBubbleVent(x, y, z){
+  const N = 42, H = 23;
+  const pos = new Float32Array(N * 3), spd = new Float32Array(N);
+  for (let i = 0; i < N; i++){
+    const a = rand(0, Math.PI * 2), r = Math.sqrt(Math.random()) * 1.5;
+    pos[i * 3] = Math.cos(a) * r; pos[i * 3 + 1] = rand(0, H); pos[i * 3 + 2] = Math.sin(a) * r;
+    spd[i] = rand(2.6, 5.2);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xbfe8ff, size: 0.65, transparent: true, opacity: 0.5, depthWrite: false }));
+  pts.position.set(x, y, z);
+  pts.userData.setPiece = 'vent';
+  envFx.vents.push({ pts, spd, h: H });
+  return pts;
+}
+function makeWreckCluster(mat){
+  const parts = [];
+  const plate = (w, h, d, x, y, z, rx, ry, rz) => {
+    const g = new THREE.BoxGeometry(w, h, d);
+    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, ry, rz));
+    m.setPosition(x, y, z); g.applyMatrix4(m); parts.push(g);
+  };
+  plate(7, 0.35, 4.5, 0, 0, 0, 0.15, 0.4, 0.08);
+  plate(5.5, 0.3, 3.6, 1.8, 0.9, -1.2, -0.3, 1.1, 0.5);
+  plate(4.2, 0.3, 3, -2.2, 0.5, 1.4, 0.5, 2.2, -0.2);
+  for (let i = 0; i < 3; i++){
+    const g = new THREE.CylinderGeometry(0.85, 0.85, 2.3, 9);
+    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(Math.PI / 2 + rand(-0.3, 0.3), 0, rand(0, 3)));
+    m.setPosition(rand(-3, 3), 0.6, rand(-2.5, 2.5)); g.applyMatrix4(m); parts.push(g);
+  }
+  const holder = new THREE.Group(); holder.userData.setPiece = 'wreck';
+  holder.add(new THREE.Mesh(mergeGeometries(parts), mat));
+  return holder;
+}
+const ANEM_HEXES = [0xff5a7a, 0xb46aff, 0x35e0c8, 0xff8c5a];
+function makeAnemonePatch(){
+  const hex = pick(ANEM_HEXES);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x180d14, roughness: 0.5, metalness: 0.05, emissive: hex, emissiveIntensity: 1.1 });
+  const parts = [];
+  for (let i = 0; i < 12; i++){
+    const g = new THREE.ConeGeometry(rand(0.22, 0.4), rand(1.2, 2.4), 6);
+    const a = rand(0, Math.PI * 2), r = Math.sqrt(Math.random()) * 3.2;
+    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rand(-0.35, 0.35), 0, rand(-0.35, 0.35)));
+    m.setPosition(Math.cos(a) * r, rand(0.5, 1.1), Math.sin(a) * r);
+    g.applyMatrix4(m); parts.push(g);
+  }
+  for (let i = 0; i < 5; i++){
+    const g = new THREE.SphereGeometry(rand(0.3, 0.55), 8, 6);
+    g.translate(rand(-3, 3), 0.3, rand(-3, 3)); parts.push(g);
+  }
+  const holder = new THREE.Group(); holder.userData.setPiece = 'anemone';
+  holder.add(new THREE.Mesh(mergeGeometries(parts), mat));
+  const sp = makeGlowSprite(hex, 7.5, 0.28); sp.position.y = 1.2; holder.add(sp);
+  return holder;
+}
+// Survival shaft dressing: a periodic rock wall (50 m bands) that snaps along
+// with the descent, PLUS per-floor dressing so no floor reads empty: instanced
+// spires/pillars for verticality, mid-field outcrops carrying coral + kelp
+// forests, and one rotating set piece per floor. Decoration only — no
+// colliders, no gameplay effect. Deeper bands run sparser but bigger.
 function addSurvivalDressing(scene){
   resetEnvFx();
   const S = CONFIG.survival;
   const mat = std(0x24333a, { roughness: 0.95, metalness: 0.04, flatShading: true });
-  const batch = rockBatch(mat);
+  const batch = rockBatch(mat);   // wall + spires + pillars + outcrops: 1 draw call
+  const batch2 = rockBatch(mat);  // set-piece base rocks: 1 more
   const BAND = 50, BANDS = 8;
+  const outcrops = []; // {x, y(top), z} — coral / kelp / vent anchors in the play volume
   for (let b = 0; b < BANDS; b++){
+    const top = -b * BAND, deep = b >= 4, big = deep ? 1.4 : 1;
     for (let i = 0; i < 26; i++){
       const a = (i / 26) * Math.PI * 2 + rand(-0.09, 0.09) + b * 0.35, r = S.shaftRadius + rand(4, 18), s = rand(6, 13);
       batch.add(Math.cos(a) * r, -b * BAND - rand(0, BAND), Math.sin(a) * r, s, s * rand(0.9, 1.4), s);
@@ -1722,10 +1906,52 @@ function addSurvivalDressing(scene){
       const a = rand(0, Math.PI * 2), r = S.shaftRadius - rand(2, 10), s = rand(4, 8);
       batch.add(Math.cos(a) * r, -b * BAND - rand(6, 44), Math.sin(a) * r, s, s * 0.7, s);
     }
+    // rock spires hugging the wall — tall silhouettes that break its flatness
+    for (let i = 0, n = deep ? 2 : 3; i < n; i++){
+      const a = rand(0, Math.PI * 2), r = S.shaftRadius - rand(10, 24), h = rand(15, 34) * big;
+      batch.add(Math.cos(a) * r, top - rand(6, 30), Math.sin(a) * r, rand(2.6, 4.2) * big, h, rand(2.6, 4.2) * big);
+    }
+    // free-standing pillars inside the play volume (r ≥ 76: clear of the gate)
+    for (let i = 0, n = deep ? 1 : 2; i < n; i++){
+      const a = rand(0, Math.PI * 2), r = rand(76, 118), h = rand(11, 24) * big;
+      batch.add(Math.cos(a) * r, top - rand(10, 34), Math.sin(a) * r, rand(3, 5) * big, h, rand(3, 5) * big);
+    }
+    // mid-field outcrops (r ≥ 74: clear of the gate) — anchors for the flora
+    for (let i = 0; i < 2; i++){
+      const a = rand(0, Math.PI * 2), r = rand(74, 122), s = rand(4.5, 8) * big, y = top - rand(8, 42);
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      batch.add(x, y, z, s, s * 0.75, s);
+      outcrops.push({ x, y: y + s * 0.55, z });
+    }
   }
   const grp = new THREE.Group();
   grp.add(batch.build());
-  addSurvivalFlora(grp);
+  // ---- set pieces: one per floor (25 m), rotating vent / wreck / anemone ----
+  const wreckMat = std(0x2c3840, { roughness: 0.75, metalness: 0.5, flatShading: true });
+  for (let f = 0; f < BANDS * 2; f++){
+    const floorTop = -f * 25, type = f % 3;
+    if (type === 0){ // bubble vent — rooted on an outcrop of this floor when one is near
+      const anchor = outcrops.find(o => o.y < floorTop + 2 && o.y > floorTop - 27);
+      if (anchor) grp.add(makeBubbleVent(anchor.x, anchor.y, anchor.z));
+      else {
+        const a = rand(0, Math.PI * 2), r = rand(80, 118), x = Math.cos(a) * r, z = Math.sin(a) * r;
+        batch2.add(x, floorTop - 23.5, z, 4, 2, 4);
+        grp.add(makeBubbleVent(x, floorTop - 22.5, z));
+      }
+    } else if (type === 1){ // wreck debris — upper half of the floor (gate plane: floorTop − 20)
+      const a = rand(0, Math.PI * 2), r = rand(48, 115);
+      const w = makeWreckCluster(wreckMat);
+      w.position.set(Math.cos(a) * r, floorTop - rand(3, 8), Math.sin(a) * r);
+      w.rotation.y = rand(0, Math.PI * 2);
+      grp.add(w);
+    } else { // glowing anemone patch on the wall
+      const a = rand(0, Math.PI * 2), r = rand(128, 142), x = Math.cos(a) * r, z = Math.sin(a) * r, y = floorTop - rand(6, 20);
+      batch2.add(x, y - 1.2, z, 4.5, 2.6, 4.5);
+      const an = makeAnemonePatch(); an.position.set(x, y, z); grp.add(an);
+    }
+  }
+  grp.add(batch2.build());
+  addSurvivalFlora(grp, outcrops);
   scene.add(grp);
   registerReveal(grp, { min: 0.24 });
   envFx.shaft = grp;
@@ -2405,10 +2631,10 @@ function spawnSurvivalGate(f){
   const pos = new THREE.Vector3(Math.cos(a) * r, -(f + 1) * S.floorDepth + 5, Math.sin(a) * r);
   const gate = spawnGate(gameScene, pos);
   gate.group.rotation.x = Math.PI / 2; // ring lies flat — you dive through it
-  const core = glowBall(0.9, 0xff4d6d); gate.group.add(core);
+  const core = glowBall(0.9, 0xff4d6d); core.material.fog = false; gate.group.add(core);
   const column = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, 30, 12, 1, true),
     new THREE.MeshBasicMaterial({ color: 0x37e08b, transparent: true, opacity: 0.15,
-      side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+      side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
   column.position.copy(pos); column.position.y += 15;
   column.visible = false;
   gameScene.add(column);
@@ -2533,6 +2759,9 @@ function onStratumCross(newStratum, floor){
   const st = S.strata[newStratum % S.strata.length];
   gameScene.background.setHex(st.tint);
   gameScene.fog.color.setHex(st.tint);
+  // The deeper the stratum, the thicker the murk (fog colour follows above).
+  gameScene.fog.near = Math.max(25, FOG_NEAR - newStratum);
+  gameScene.fog.far = Math.max(84, FOG_FAR - newStratum * 5);
   bankCoins(Math.round(CONFIG.econ.stratumBonus * G.diff.mult));
   toast('▼ ' + st.name + ' — FLOOR ' + floor, 3200);
   updateObjective();
@@ -2900,6 +3129,33 @@ function wire(){
   const sb = $('btn-sound');
   sb.textContent = Music.muted() ? '🔇' : '🔊';
   sb.onclick = ()=>{ AudioSys.init(); Music.toggleMute(); };
+  // ---- UI sounds: ONE delegated hook covers every menu control, static and
+  // dynamically built (zone DIVE buttons, hangar buy buttons, boon cards),
+  // with per-action variants. Hangar buy buttons are disabled when
+  // unaffordable, so a 'buy' sound only ever follows a real purchase. Hover
+  // is deduped per element + throttled, so sweeping across the menu can't
+  // machine-gun. Gameplay canvas clicks match nothing here — no UI sounds
+  // in-game.
+  let hoverEl = null, hoverT = 0;
+  const uiTarget = e => e.target.closest ? (e.target.closest('button') || e.target.closest('.diff')) : null;
+  document.addEventListener('pointerover', e => {
+    const b = uiTarget(e);
+    if (!b || b.disabled || b === hoverEl) return;
+    hoverEl = b;
+    const now = performance.now(); if (now - hoverT < 70) return; hoverT = now;
+    AudioSys.ui('hover');
+  });
+  document.addEventListener('pointerout', e => { if (hoverEl && e.target === hoverEl) hoverEl = null; });
+  document.addEventListener('click', e => {
+    if (e.target.closest && e.target.closest('#boon-cards .card')){ AudioSys.ui('click'); return; }
+    const b = uiTarget(e);
+    if (!b || b.disabled) return;
+    const id = b.id || '';
+    if (/back|quit/.test(id)) AudioSys.ui('back');
+    else if (b.classList.contains('buy')) AudioSys.ui('buy');
+    else if (b.classList.contains('diff') || id === 'btn-sound') AudioSys.ui('toggle');
+    else AudioSys.ui('click');
+  });
 }
 (async function boot(){
   if (SAVE.trioBest === undefined) SAVE.trioBest = 0;
