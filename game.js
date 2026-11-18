@@ -2223,6 +2223,22 @@ function startExpedition(zone){
 function crystalValueNow(){ return CONFIG.survival.crystalBase + G.stratum * CONFIG.survival.crystalPerStratum; }
 const BAND_KELP_MAT = new THREE.MeshStandardMaterial({ color: 0x27573f, roughness: 0.6, metalness: 0.05,
   emissive: 0x14301f, emissiveIntensity: 0.35, side: THREE.DoubleSide, transparent: true, opacity: 0.92 });
+// Floor themes (hybrid expedition-style floors, Akmal 19 Nov): Survival
+// keeps its endless shaft + descent, but every floor carries one rotating
+// identity — a mid-shaft set piece with its own dressing language, like an
+// expedition zone in miniature. Rotation is by floor number, so a dive
+// reads Wreck → Kelp → Ruins → Vent → Wreck … all the way down.
+const FLOOR_THEMES = [
+  { id: 'wreck', name: 'WRECK FIELD', icon: '🛳' },
+  { id: 'kelp', name: 'KELP FOREST', icon: '🌿' },
+  { id: 'ruins', name: 'SUNKEN RUINS', icon: '🏛' },
+  { id: 'vent', name: 'VENT FIELD', icon: '🌋' },
+];
+const floorTheme = f => FLOOR_THEMES[((f % FLOOR_THEMES.length) + FLOOR_THEMES.length) % FLOOR_THEMES.length];
+const BAND_WRECK_MAT = std(0x2c3840, { roughness: 0.75, metalness: 0.5, flatShading: true });
+const BAND_STONE_MAT = std(0x4a4a52, { roughness: 0.9, flatShading: true });
+const BAND_LAVA_MAT = std(0x1c1712, { roughness: 1, flatShading: true });
+const BAND_ROCK_MAT = std(0x1c2a30, { roughness: 0.95 });
 function ensureBands(){
   const S = CONFIG.survival, py = player.group.position.y;
   while (G.bandY > py - 290){
@@ -2265,6 +2281,66 @@ function ensureBands(){
       G.rocks.push(rock);
       bandRocks.push({ x: rock.position.x, y: rock.position.y, z: rock.position.z, rad });
     }
+    // Floor theme set piece (see FLOOR_THEMES): one themed group per band,
+    // culled with the band via G.rocks exactly like the guard cluster. The
+    // theme anchor is pushed into bandRocks BEFORE the crystals sample, so
+    // quota items keep their distance from the set piece.
+    const theme = floorTheme(servedFloor);
+    const ta = rand(0, Math.PI * 2), tr = rand(58, 102);
+    const tAnchor = new THREE.Vector3(Math.cos(ta) * tr, G.bandY + rand(6, 12), Math.sin(ta) * tr);
+    const tg = new THREE.Group(); tg.position.copy(tAnchor);
+    if (theme.id === 'wreck'){
+      const wreck = makeShipwreck(BAND_WRECK_MAT);
+      wreck.position.set(0, -1, 0); wreck.rotation.y = rand(0, Math.PI * 2);
+      tg.add(wreck);
+      const debris = makeWreckCluster(BAND_WRECK_MAT);
+      debris.position.set(rand(-16, 16), -2.5, rand(-16, 16)); debris.rotation.y = rand(0, Math.PI * 2);
+      tg.add(debris);
+      for (let i = 0; i < 3; i++){
+        const dr = new THREE.Mesh(new THREE.DodecahedronGeometry(rand(1.5, 3), 0), BAND_ROCK_MAT);
+        dr.position.set(rand(-18, 18), rand(-3, 0), rand(-18, 18));
+        tg.add(dr);
+      }
+    } else if (theme.id === 'kelp'){
+      for (let i = 0; i < 15; i++){
+        const a = rand(0, Math.PI * 2), r = Math.sqrt(Math.random()) * 20;
+        addKelp(tg, BAND_KELP_MAT, Math.cos(a) * r, -4, Math.sin(a) * r, 0x7fe0ff);
+      }
+      const an = makeAnemonePatch(); an.position.set(rand(-10, 10), -2, rand(-10, 10)); tg.add(an);
+    } else if (theme.id === 'ruins'){
+      const nP = 7, ringR = 12;
+      for (let i = 0; i < nP; i++){
+        const a = (i / nP) * Math.PI * 2, h = rand(6, 13), toppled = (i === 2 || i === 5);
+        const pil = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.4, h, 8), BAND_STONE_MAT);
+        if (toppled){ pil.rotation.z = Math.PI / 2 - rand(-0.12, 0.12); pil.position.set(Math.cos(a) * ringR, -2.5, Math.sin(a) * ringR); }
+        else { pil.position.set(Math.cos(a) * ringR, h / 2 - 4, Math.sin(a) * ringR); pil.rotation.z = rand(-0.05, 0.05); }
+        tg.add(pil);
+      }
+      const lintel = new THREE.Mesh(new THREE.BoxGeometry(10, 1.2, 1.7), BAND_STONE_MAT);
+      const la = (0.5 / nP) * Math.PI * 2;
+      lintel.position.set(Math.cos(la) * ringR, 8.2, Math.sin(la) * ringR);
+      lintel.rotation.y = -la + Math.PI / 2;
+      tg.add(lintel);
+      for (let i = 0; i < 3; i++){
+        const drum = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 1.6, 8), BAND_STONE_MAT);
+        drum.rotation.z = Math.PI / 2; drum.rotation.y = rand(0, 3);
+        drum.position.set(rand(-4, 4), -3.2, rand(-4, 4));
+        tg.add(drum);
+      }
+    } else { // vent
+      for (let i = 0; i < 2; i++) tg.add(makeBubbleVent(rand(-12, 12), -2, rand(-12, 12)));
+      for (let i = 0; i < 4; i++){
+        const vr = new THREE.Mesh(new THREE.DodecahedronGeometry(rand(2, 4.5), 0), BAND_LAVA_MAT);
+        vr.position.set(rand(-15, 15), rand(-3.5, -1), rand(-15, 15));
+        tg.add(vr);
+        const ember = glowBall(0.35, 0xff6a2a);
+        ember.position.set(vr.position.x, vr.position.y + 1.2, vr.position.z);
+        tg.add(ember);
+      }
+    }
+    gameScene.add(registerReveal(tg, { min: 0.13 }));
+    G.rocks.push(tg);
+    bandRocks.push({ x: tAnchor.x, y: tAnchor.y, z: tAnchor.z, rad: 11 });
     const clearOfRocks = (p, margin) => { for (const rk of bandRocks){ const dx = p.x - rk.x, dy = p.y - rk.y, dz = p.z - rk.z; if (dx*dx + dy*dy + dz*dz < (rk.rad + margin) * (rk.rad + margin)) return false; } return true; };
     const guarded = [];
     for (let i=0;i<3;i++){
@@ -3184,6 +3260,9 @@ function updateSurvival(dt){
     // old 60 s timer draft and the stratum-cross draft are gone; boss kills
     // (Warden / Three Guardians) still grant their draft as the boss reward.
     if (newFloor % 10 === 5) openBoonDraft();
+    // Name the floor's theme on entry, expedition-style (skipped on stratum
+    // floors — the stratum/boss announcement owns those).
+    if (newFloor % 10 !== 0){ const th = floorTheme(newFloor); toast(th.icon + ' FLOOR ' + newFloor + ' — ' + th.name, 1900); }
     updateObjective();
   }
   updateSurvivalGate();
