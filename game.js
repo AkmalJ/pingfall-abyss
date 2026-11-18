@@ -22,6 +22,13 @@ const CONFIG = {
   emp: { cooldown: 20 },
   decoy: { life: 12, radius: 95, pulse: 0.6 },
 
+  // ---- pulse cannon (hold LMB): rapid bolts, OVERHEAT instead of ammo ----
+  pulse: { dmg: 0.05, skitterMul: 2, rate: 8, range: 32, speed: 88,
+           heatRate: 100 / 2.2, ventRate: 100 / 1.6, unlockAt: 40 },
+
+  // ---- hunter senses (DESIGN.md "Hunter senses & aggression") ----
+  senses: { proxBase: 20, phantomStealth: 0.6, investigateDur: 10, patrolSpeedMul: 0.45, patrolReach: 7 },
+
   // ---- economy (DESIGN.md audited numbers) ----
   econ: { golden: 100, starBonus: { 2: 25, 3: 75 }, closeCall: 10, minuteBonus: 20,
           stratumBonus: 10, cacheMin: 50, cacheMax: 150, ancientBounty: 150 },
@@ -70,15 +77,15 @@ const CONFIG = {
       tint:{ water:0x0a2e1e, fog:0x061a10, accent:0x59e08a }, decor:'pillars',
       desc:'A stranded mini-sub waits among the pillars.' },
     { id:3, name:'The Wreck Field', depth:[320,520], crystalValue:20, crystals:16, escape:80, rec:'Barracuda',
-      mission:{ type:'nests', nests:3 },    hunters:['stalker','skitter','brute'], hunterSpeedMul:1.0, mines:5, jellies:9,
+      mission:{ type:'nests', nests:3 },    hunters:['stalker','skitter','brute','skitter'], hunterSpeedMul:1.0, mines:5, jellies:9,
       tint:{ water:0x1c1410, fog:0x120c08, accent:0xe08a4d }, decor:'wreck',
       desc:'Mines and hunter nests among the wrecks.' },
     { id:4, name:'Magenta Deep',  depth:[520,780],   crystalValue:35, crystals:18, escape:150, rec:'Phantom',
-      mission:{ type:'survive', time:75 },  hunters:['stalker','skitter','sentry','brute'], hunterSpeedMul:1.25, mines:6, jellies:10,
+      mission:{ type:'survive', time:75 },  hunters:['stalker','skitter','sentry','brute','stalker'], hunterSpeedMul:1.25, mines:6, jellies:10,
       tint:{ water:0x2a0a24, fog:0x1a0616, accent:0xe05ad0 }, decor:'crystals',
       desc:'A sentry listens here. Survive the timer.' },
     { id:5, name:'The Abyss Gate', depth:[780,1100], crystalValue:60, crystals:20, escape:300, rec:'Leviathan',
-      mission:{ type:'collect', quota:11 }, hunters:['stalker','skitter','brute','sentry','lurker'], hunterSpeedMul:1.15, mines:7, jellies:12,
+      mission:{ type:'collect', quota:11 }, hunters:['stalker','skitter','brute','sentry','lurker','skitter'], hunterSpeedMul:1.15, mines:7, jellies:12,
       tint:{ water:0x12081f, fog:0x0a0414, accent:0x8a6aff }, decor:'gate',
       desc:'Everything hunts here. Reach the final gate.' },
   ],
@@ -131,6 +138,7 @@ const CONFIG = {
     spawnStart: 16, spawnMin: 6, spawnDecay: 0.97, maxHunters: 8,
     collapseStart: 90, collapseBase: 1.15, boonEvery: 60, ancientEvery: 300,
     crystalBase: 5, crystalPerStratum: 3, bandEvery: 25, shaftRadius: 150,
+    gateQuota: 3, // crystals to collect ON a normal floor to open its descent gate (+1 per stratum)
   },
 
   // ---- Stratum Warden (survival boss at floors 10/20/30...) ----
@@ -254,6 +262,8 @@ const AudioSys = {
   emp(){ this.tone(1200, 0.5, 'sine', 0.1, 90); this.noiseBurst(0.4, 1600, 0.08); },
   hit(){ this.tone(110, 0.22, 'sawtooth', 0.16, 55); this.noiseBurst(0.18, 700, 0.12); },
   gate(){ this.tone(523, 0.16, 'sine', 0.1); this.tone(784, 0.22, 'sine', 0.1, null, 0.13); },
+  zap(){ this.tone(rand(760, 980), 0.06, 'square', 0.045, 190); },
+  overheat(){ this.noiseBurst(0.28, 2600, 0.06); this.tone(220, 0.2, 'sawtooth', 0.05, 70); },
   setGrowl(level){ if (this.growlGain && this.ctx) { try { this.growlGain.gain.setTargetAtTime(clamp(level,0,0.14), this.ctx.currentTime, 0.15); } catch(e) {} } },
 };
 
@@ -805,7 +815,7 @@ function buildFishSchool(scene, center){
     scatter(){ this.scatterT = 1.6; },
     update(dt, t, bounds){
       this.wanderT -= dt;
-      if (this.wanderT <= 0){ this.wanderT = rand(4,7);
+      if (this.wanderT <= 0){ this.wanderT = rand(3, 5.5);
         this.target.set(clamp(this.center.x + rand(-70,70), -bounds, bounds), clamp(this.center.y + rand(-14,14), -24, 30), clamp(this.center.z + rand(-70,70), -bounds, bounds)); }
       this.center.lerp(this.target, dt * 0.25);
       if (this.scatterT > 0) this.scatterT -= dt;
@@ -813,9 +823,9 @@ function buildFishSchool(scene, center){
       for (const f of this.fishes){
         const desired = this.center.clone(); desired.x += f.userData.off.x * spread; desired.y += f.userData.off.y * spread + Math.sin(t*2 + f.id)*0.4; desired.z += f.userData.off.z * spread;
         const to = desired.sub(f.position);
-        const steer = to.multiplyScalar(this.scatterT > 0 ? 2.2 : 1.1);
-        f.userData.vel.lerp(steer, clamp(dt * (this.scatterT > 0 ? 3.2 : 1.4), 0, 1));
-        const sp = f.userData.vel.length(), maxSp = this.scatterT > 0 ? 26 : 9;
+        const steer = to.multiplyScalar(this.scatterT > 0 ? 2.6 : 1.1);
+        f.userData.vel.lerp(steer, clamp(dt * (this.scatterT > 0 ? 3.2 : 1.8), 0, 1));
+        const sp = f.userData.vel.length(), maxSp = this.scatterT > 0 ? 30 : 11.5;
         if (sp > maxSp) f.userData.vel.multiplyScalar(maxSp / sp);
         f.position.addScaledVector(f.userData.vel, dt);
         if (f.userData.vel.lengthSq() > 0.1){ const look = f.position.clone().add(f.userData.vel); f.lookAt(look); }
@@ -1042,10 +1052,12 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 canvas.addEventListener('mousedown', () => {
   AudioSys.init();
-  if (uiState === 'playing'){ if (pointerLocked) fireTorpedo(); else canvas.requestPointerLock(); }
+  if (uiState === 'playing'){ if (pointerLocked){ if (G) G.cannonHeld = true; } else canvas.requestPointerLock(); }
 });
+window.addEventListener('mouseup', () => { if (G) G.cannonHeld = false; });
 document.addEventListener('pointerlockchange', () => {
   pointerLocked = document.pointerLockElement === canvas;
+  if (G) G.cannonHeld = false;
   if (!pointerLocked && uiState === 'playing' && G && !G.over) pauseGame();
 });
 document.addEventListener('mousemove', e => {
@@ -1077,6 +1089,9 @@ function newG(mode){
     closeCalls:0, kills:0, torps:0, decoys:0, hintStep:-1, camShake:0,
     hunters:[], crystals:[], jellies:[], mines:[], nests:[], fired:[], schools:[], waves:[], fx:[],
     decoyActive:null, gate:null, stranded:null, boon:{ sonarMul:1, speedMul:1, crystalMul:1, empCdMul:1, battMax:0 },
+    // survival descent gate + pulse cannon state
+    floorCrystals:0, survGate:null, gateWarnT:0,
+    cannonHeld:false, cannonHeat:0, cannonLock:false, cannonFireT:0, bolts:[],
     // survival director
     stratum:0, floor:0, maxDepth:0, spawnT:6, spawnInterval:CONFIG.survival.spawnStart,
     nextBoonAt:CONFIG.survival.boonEvery, nextMinuteAt:60, nextAncientAt:CONFIG.survival.ancientEvery,
@@ -1127,7 +1142,7 @@ function spawnPlayer(scene, subId, pos){
 // most and the head stays stable; amplitude/rate are driven per-frame from swim speed.
 const SWIM_TIME = { value: 0 };
 function applySwim(group, kind){
-  const uniforms = { uTime: SWIM_TIME, uAmp: { value: kind === 'sway' ? 0.05 : 0 }, uFreq: { value: 2.6 },
+  const uniforms = { uTime: SWIM_TIME, uAmp: { value: kind === 'sway' ? 0.05 : 0 }, uFreq: { value: 3.4 },
     uRate: { value: kind === 'sway' ? 1.6 : 7 }, uPhase: { value: rand(0, Math.PI * 2) },
     uMin: { value: 0 }, uSpan: { value: 1 }, uAxisMask: { value: new THREE.Vector3(1, 0, 0) },
     uLatMask: { value: new THREE.Vector3(0, 0, 1) }, uWgtTop: { value: 0 }, uVertK: { value: 1 } };
@@ -1187,6 +1202,7 @@ function spawnHunter(scene, typeId, pos, opts = {}){
     hitCd: 0, closeCd: 0, disabled: 0, sentryT: rand(2.5, 5.5), phase: rand(0, Math.PI * 2),
     ancient: !!opts.ancient, warden: opts.warden || null, trioRole: opts.trioRole || null,
     dmgTakenMul: opts.dmgTakenMul || 1, speedMul: (opts.speedMul || 1), splitDone: false, dead: false,
+    investigateT: 0, investPoint: pos.clone(), patrolTarget: null, patrolT: 0,
     swim: swimU, vel: new THREE.Vector3() };
   G.hunters.push(h);
   return h;
@@ -1810,6 +1826,7 @@ function startSurvival(diffId){
   const pts = makeParticles(600, 380, 380, 380); gameScene.add(pts); G.particles = pts;
   for (let i=0;i<2;i++) G.schools.push(buildFishSchool(gameScene, new THREE.Vector3(rand(-80, 80), rand(-40, -10), rand(-80, 80))));
   ensureBands();
+  spawnSurvivalGate(0);
   document.documentElement.style.setProperty('--accent', hexCss(accentHex(SAVE.sub)));
   setUI('playing');
   updateObjective();
@@ -1995,7 +2012,72 @@ function updateTorpedoes(dt){
   }
 }
 
+// ============================ PULSE CANNON ============================
+// Hold LMB: rapid close-range bolts. No ammo — an OVERHEAT gauge instead:
+// ~2.2 s of continuous fire to full, vents in ~1.6 s, lockout until below 40.
+function fireBolt(){
+  const P = CONFIG.pulse, fwd = playerForward();
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), new THREE.MeshBasicMaterial({ color: 0xaef7ff }));
+  core.scale.set(1, 1, 2.6); g.add(core);
+  g.add(makeGlowSprite(accentHex(player.subId), 2.6, 0.5));
+  g.position.copy(player.group.position).addScaledVector(fwd, 5.5);
+  g.lookAt(g.position.clone().add(fwd));
+  gameScene.add(g);
+  const vel = fwd.clone();
+  vel.x += rand(-0.012, 0.012); vel.y += rand(-0.012, 0.012); vel.z += rand(-0.012, 0.012);
+  vel.normalize().multiplyScalar(P.speed);
+  G.bolts.push({ group: g, vel, life: P.range / P.speed });
+  AudioSys.zap();
+}
+function updatePulseCannon(dt){
+  const P = CONFIG.pulse;
+  const firing = G.cannonHeld && !G.cannonLock && !G.over;
+  if (firing){
+    G.cannonHeat = Math.min(100, G.cannonHeat + P.heatRate * dt);
+    G.cannonFireT -= dt;
+    if (G.cannonFireT <= 0){ G.cannonFireT = Math.max(0, G.cannonFireT + 1 / P.rate); fireBolt(); }
+    if (G.cannonHeat >= 100){ G.cannonLock = true; AudioSys.overheat(); toast('🔥 Pulse cannon overheated — venting!'); }
+  } else {
+    G.cannonFireT = 0;
+    if (G.cannonHeat > 0) G.cannonHeat = Math.max(0, G.cannonHeat - P.ventRate * dt);
+    if (G.cannonLock && G.cannonHeat < P.unlockAt) G.cannonLock = false;
+  }
+  for (let i = G.bolts.length - 1; i >= 0; i--){
+    const b = G.bolts[i]; b.life -= dt;
+    b.group.position.addScaledVector(b.vel, dt);
+    let boom = b.life <= 0, hitDone = false;
+    if (!boom){
+      for (const h of G.hunters){
+        if (h.dead) continue;
+        const rr = h.type.hitR * Math.max(1, h.group.scale.x) * 0.8 + 0.9;
+        if (b.group.position.distanceTo(h.group.position) < rr){
+          damageTarget({ kind: 'hunter', ref: h }, P.dmg * (h.typeId === 'skitter' ? P.skitterMul : 1));
+          hitDone = true; break;
+        }
+      }
+      if (!hitDone) for (const n of G.nests){
+        if (!n.dead && b.group.position.distanceTo(n.group.position) < 3.4){
+          damageTarget({ kind: 'nest', ref: n }, P.dmg); hitDone = true; break;
+        }
+      }
+      if (hitDone) boom = true;
+    }
+    if (boom){ gameScene.remove(b.group); G.bolts.splice(i, 1); }
+  }
+}
+
 // ============================ HUNTER AI ============================
+function pickPatrolPoint(h){
+  const cands = [];
+  for (const c of G.crystals) if (!c.taken) cands.push(c.group.position);
+  if (G.mode === 'expedition' && G.gate) cands.push(G.gate.pos);
+  if (G.mode === 'survival' && G.survGate) cands.push(G.survGate.gate.pos);
+  const base = cands.length ? pick(cands) : h.home;
+  const p = base.clone(); p.x += rand(-9, 9); p.z += rand(-9, 9); p.y += rand(-3, 3);
+  if (G.mode === 'expedition') p.y = clamp(p.y, CONFIG.arena.floorY + 3, CONFIG.arena.ceilY - 3);
+  return p;
+}
 function updateHunters(dt){
   const pp = player.group.position;
   for (const h of G.hunters){
@@ -2009,6 +2091,21 @@ function updateHunters(dt){
     if (boss){ h.awareness = 1; h.targetKind = 'player'; h.lastNoise.copy(pp); }
     else if (h.typeId !== 'lurker') h.awareness = Math.max(0, h.awareness - dt * (h.awareness > 0.65 ? 0.028 : 0.05));
     h.state = h.awareness < 0.25 ? 'dormant' : h.awareness < 0.6 ? 'curious' : 'hunting';
+    // --- senses (DESIGN.md): investigation memory + proximity sense ---
+    if (!boss && h.typeId !== 'lurker'){
+      if (h.state === 'hunting'){ h.investigateT = CONFIG.senses.investigateDur; h.investPoint.copy(h.lastNoise); }
+      else if (h.investigateT > 0) h.investigateT = Math.max(0, h.investigateT - dt);
+      // proximity sense: a mobile hunter feels you nearby even in total silence
+      // (sentries sense via their own pings; lurkers ambush by proximity already)
+      if (h.typeId !== 'sentry'){
+        const stealthF = player.subId === 'phantom' ? CONFIG.senses.phantomStealth : player.d.def.noiseMul;
+        if (distP < CONFIG.senses.proxBase * stealthF){
+          h.awareness = Math.max(h.awareness, 0.7);
+          h.lastNoise.copy(pp); h.targetKind = 'player';
+          h.state = 'hunting';
+        }
+      }
+    }
     if (h.typeId === 'lurker') setCore(h, h.lurkState === 'dash' ? 0xff4d6d : 0x6a4aff);
     else if (h.typeId === 'sentry' || h.trioRole === 'eye') setCore(h, 0xffb84d);
     else setCore(h, CONFIG.hunterStates[h.state].core);
@@ -2034,14 +2131,24 @@ function updateHunters(dt){
           if (h.lurkT <= 0 && ((distP < 46 && speedFrac > 0.45) || distP < 17)){ h.lurkState = 'dash'; h.lurkT = 2.4; }
         }
       } else if (h.state === 'dormant'){
-        target = h.home.clone();
-        target.x += Math.sin(G.time * 0.24 + h.phase) * 16;
-        target.z += Math.cos(G.time * 0.19 + h.phase) * 16;
-        target.y += Math.sin(G.time * 0.4 + h.phase) * 3;
-        speed = h.type.speed * 0.3;
+        // active patrol: cruise between waypoints around crystals and the gate
+        h.patrolT -= dt;
+        if (!h.patrolTarget || h.patrolT <= 0 || pos.distanceTo(h.patrolTarget) < CONFIG.senses.patrolReach){
+          h.patrolTarget = pickPatrolPoint(h); h.patrolT = rand(14, 22);
+        }
+        target = h.patrolTarget;
+        speed = h.type.speed * CONFIG.senses.patrolSpeedMul;
       } else if (h.state === 'curious'){
-        target = (h.targetKind === 'decoy' && G.decoyActive) ? G.decoyActive.group.position : h.lastNoise;
-        speed = h.type.speed * 0.7;
+        if (h.targetKind === 'decoy' && G.decoyActive){ target = G.decoyActive.group.position; speed = h.type.speed * 0.7; }
+        else if (h.investigateT > 0){
+          // investigation: sweep the last-heard area before calming down
+          target = h.investPoint.clone();
+          target.x += Math.sin(G.time * 0.5 + h.phase) * 11;
+          target.z += Math.cos(G.time * 0.43 + h.phase) * 11;
+          target.y += Math.sin(G.time * 0.6 + h.phase) * 2.5;
+          speed = h.type.speed * 0.65;
+        }
+        else { target = h.lastNoise; speed = h.type.speed * 0.7; }
       } else {
         target = (h.targetKind === 'decoy' && G.decoyActive) ? G.decoyActive.group.position : (boss ? pp : h.lastNoise);
         speed = h.type.speed;
@@ -2055,6 +2162,13 @@ function updateHunters(dt){
         } else h.vel.multiplyScalar(Math.max(0, 1 - 3 * dt));
       }
       pos.addScaledVector(h.vel, dt);
+      // whole-body swim motion tied to actual swim speed: a smoothed speed factor
+      // + phase accumulators (so rate changes never pop), feeding the roll and bob
+      // below on top of the turn banking and the vertex bend
+      const sfNow = h.type.speed > 0 ? clamp(h.vel.length() / h.type.speed, 0, 1.2) : 0;
+      h.swimSf = lerp(h.swimSf || 0, sfNow, clamp(dt * 3, 0, 1));
+      h.rollPh = (h.rollPh || 0) + dt * (2.2 + h.swimSf * 4.5);
+      h.bobPh = (h.bobPh || 0) + dt * (3.0 + h.swimSf * 5.0);
       if (h.vel.lengthSq() > 0.5){
         g.lookAt(pos.clone().add(h.vel));
         // banking into turns + a gentle pitch wave (eel feel; complements the vertex bend)
@@ -2063,9 +2177,13 @@ function updateHunters(dt){
         while (dy > Math.PI) dy -= Math.PI * 2; while (dy < -Math.PI) dy += Math.PI * 2;
         h.lastYaw = yaw;
         h.bank = lerp(h.bank || 0, clamp(-dy / Math.max(dt, 0.001) * 0.14, -0.5, 0.5), clamp(dt * 5, 0, 1));
-        g.rotateZ(h.bank + Math.sin(G.time * 2.1 + h.phase) * 0.045);
+        // roll oscillation grows with swim speed (was a fixed ±0.045 rad wave)
+        g.rotateZ(h.bank + Math.sin(h.rollPh + h.phase) * (0.05 + h.swimSf * 0.11));
         g.rotateX(Math.sin(G.time * 1.7 + h.phase * 1.3) * 0.04);
       }
+      // gentle vertical bob, delta-applied so it never fights movement integration
+      const bobNow = Math.sin(h.bobPh + h.phase * 1.7) * 0.30 * h.swimSf * clamp(g.scale.x, 1, 2);
+      pos.y += bobNow - (h.bobPrev || 0); h.bobPrev = bobNow;
       if (G.mode === 'expedition'){
         const horiz = Math.hypot(pos.x, pos.z), A = CONFIG.arena;
         if (horiz > A.radius){ const s = A.radius / horiz; pos.x *= s; pos.z *= s; }
@@ -2086,8 +2204,8 @@ function updateHunters(dt){
       else {
         const sf = h.type.speed > 0 ? clamp(h.vel.length() / h.type.speed, 0, 1.2) : 0;
         const k = h.typeId === 'skitter' ? 1.3 : 1;
-        h.swim.uAmp.value = (0.05 + sf * 0.15) * k;
-        h.swim.uRate.value = (4.5 + sf * 6.5) * k;
+        h.swim.uAmp.value = (0.06 + sf * 0.30) * k;
+        h.swim.uRate.value = (5.5 + sf * 9.5) * k;
       }
     }
     // contact damage
@@ -2157,6 +2275,7 @@ function updateHazardsAndPickups(dt){
         toast('✨ GOLDEN CRYSTAL! +🪙 ' + v);
       } else {
         G.crystalsGot++;
+        if (G.mode === 'survival'){ G.floorCrystals++; updateObjective(); } // descent-gate quota counts this floor's crystals
         v = Math.round(v * player.d.def.crystalMul * G.boon.crystalMul *
              (G.mode === 'expedition' && G.zone && (SAVE.stars[G.zone.id] || 0) > 0 ? 0.5 : 1) *
              (G.mode === 'survival' ? G.diff.mult : 1));
@@ -2218,13 +2337,18 @@ function updateObjective(){
     if (G.gateOpen){ o.textContent = '⚓ GATE OPEN — swim through the ring'; s.textContent = 'Stay for more crystals (stars) or leave now.'; return; }
     if (m.type === 'collect'){ o.textContent = 'Collect crystals to open the gate'; s.textContent = G.crystalsGot + '/' + m.quota + ' needed · ' + G.crystalsGot + '/' + G.crystalsTotal + ' total'; }
     else if (m.type === 'rescue'){ o.textContent = 'Find and reach the stranded mini-sub'; s.textContent = 'Ping to search. Its beacon blinks amber.'; }
-    else if (m.type === 'nests'){ o.textContent = 'Destroy the hunter nests'; s.textContent = G.nestsDown + '/' + m.nests + ' destroyed · torpedoes: Click / F'; }
+    else if (m.type === 'nests'){ o.textContent = 'Destroy the hunter nests'; s.textContent = G.nestsDown + '/' + m.nests + ' destroyed · torpedoes: F · pulse: hold Click'; }
     else if (m.type === 'survive'){ o.textContent = 'Survive until the gate opens'; s.textContent = fmtTime(Math.max(0, G.surviveT)) + ' remaining'; }
   } else {
     const st = CONFIG.survival.strata[G.stratum % CONFIG.survival.strata.length];
     o.textContent = '▼ FLOOR ' + G.floor + ' · ' + st.name;
-    const into = Math.floor(G.maxDepth) - G.floor * CONFIG.survival.floorDepth;
-    s.textContent = 'Next floor in ' + Math.max(0, CONFIG.survival.floorDepth - into) + ' m · Wardens guard every 10th floor · Trio at floor 50';
+    const sg = G.survGate;
+    if (sg && sg.open) s.textContent = '⚓ GATE OPEN — dive through the glowing ring ▼';
+    else if (sg && survIsBossFloor(sg.floor)) s.textContent = survIsTrioFloor(sg.floor)
+      ? '⛔ GATE LOCKED — slay the Three Guardians to descend'
+      : '⛔ GATE LOCKED — slay the Stratum Warden to descend';
+    else if (sg) s.textContent = '⛔ GATE LOCKED — floor crystals ' + Math.min(G.floorCrystals, sg.quota) + '/' + sg.quota;
+    else s.textContent = 'Wardens guard every 10th floor · Trio at floor 50';
   }
 }
 function completeMission(){
@@ -2259,6 +2383,67 @@ function updateMissions(dt){
     G.stranded.lamp.material.color.setHex(Math.sin(G.time * 6) > 0 ? 0xffb84d : 0x553311);
   }
   if (G.gateOpen && G.gate && player.group.position.distanceTo(G.gate.pos) < 9) endRun('clear');
+}
+
+// ============================ SURVIVAL DESCENT GATES ============================
+// Every Survival floor ends at a descent gate (DESIGN.md): while it is locked a
+// pressure-current barrier at the floor boundary pushes the player back up — a
+// floor cannot be skipped. Normal floors open on a crystal quota collected ON
+// that floor; boss floors (10/20/30…) open only when the Warden dies; trio
+// floors (50/100…) only when all Three Guardians are dead.
+function survFloorQuota(f){ return CONFIG.survival.gateQuota + Math.max(0, Math.floor((f - 1) / CONFIG.survival.floorsPerStratum)); }
+function survIsBossFloor(f){ return f > 0 && f % CONFIG.survival.floorsPerStratum === 0; }
+function survIsTrioFloor(f){ return f > 0 && f % CONFIG.trio.everyFloors === 0; }
+function spawnSurvivalGate(f){
+  if (G.survGate){
+    removeEntity(G.survGate.gate.group);
+    if (G.survGate.column) gameScene.remove(G.survGate.column);
+    G.survGate = null;
+  }
+  const S = CONFIG.survival;
+  const a = rand(0, Math.PI * 2), r = rand(26, 62);
+  const pos = new THREE.Vector3(Math.cos(a) * r, -(f + 1) * S.floorDepth + 5, Math.sin(a) * r);
+  const gate = spawnGate(gameScene, pos);
+  gate.group.rotation.x = Math.PI / 2; // ring lies flat — you dive through it
+  const core = glowBall(0.9, 0xff4d6d); gate.group.add(core);
+  const column = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, 30, 12, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0x37e08b, transparent: true, opacity: 0.15,
+      side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  column.position.copy(pos); column.position.y += 15;
+  column.visible = false;
+  gameScene.add(column);
+  gate.ringMat.color.setHex(0xff4d6d);
+  G.survGate = { gate, floor: f, open: false, bossDown: false, core, column, quota: survFloorQuota(f) };
+}
+function updateSurvivalGate(){
+  if (!G.survGate || G.survGate.floor !== G.floor) spawnSurvivalGate(G.floor);
+  const sg = G.survGate, S = CONFIG.survival;
+  const open = survIsBossFloor(sg.floor) ? sg.bossDown : G.floorCrystals >= sg.quota;
+  if (open && !sg.open){
+    sg.open = true;
+    sg.gate.ringMat.color.setHex(0x37e08b);
+    if (sg.core) sg.core.material.color.setHex(0x37e08b);
+    sg.column.visible = true;
+    AudioSys.gate();
+    toast('⚓ DESCENT GATE OPEN — dive through the ring!');
+    updateObjective();
+  }
+  if (!sg.open){
+    const boundY = -(G.floor + 1) * S.floorDepth, pp = player.group.position;
+    if (pp.y < boundY + 3){
+      pp.y = boundY + 3;
+      if (player.vel.y < 0) player.vel.y = Math.abs(player.vel.y) * 0.25; // pressure current shoves you back up
+      if (G.time > G.gateWarnT){
+        G.gateWarnT = G.time + 3;
+        toast(survIsBossFloor(sg.floor)
+          ? (survIsTrioFloor(sg.floor) ? '⛔ GATE LOCKED — the Three Guardians guard this floor' : '⛔ GATE LOCKED — the Warden guards this floor. Kill it!')
+          : '⛔ GATE LOCKED — collect ' + Math.max(0, sg.quota - G.floorCrystals) + ' more crystal(s) on this floor');
+        AudioSys.tone(140, 0.18, 'sawtooth', 0.07, 90);
+        const ob = $('hud-obj');
+        if (ob){ ob.style.borderColor = '#ff4d6d'; setTimeout(()=>{ ob.style.borderColor = ''; }, 350); }
+      }
+    }
+  }
 }
 
 // ============================ SURVIVAL DIRECTOR ============================
@@ -2298,6 +2483,8 @@ function spawnWarden(stratumIdx){
 }
 function onWardenKilled(h){
   G.wardenAlive = null;
+  if (G.survGate && h.warden && G.survGate.floor === h.warden.stratum * CONFIG.survival.floorsPerStratum)
+    G.survGate.bossDown = true; // the Warden was this floor's gate key
   const W = CONFIG.warden;
   const b = Math.round((W.coinBase + W.coinPerStratum * (h.warden.stratum - 1)) * G.diff.mult);
   bankCoins(b);
@@ -2329,6 +2516,7 @@ function onTrioMemberDown(h){
   const left = G.trio.members.filter(m => !m.dead).length;
   if (left > 0){ toast('Guardian down — ' + left + ' remain!'); return; }
   G.trio.cleared = true;
+  if (G.survGate && G.survGate.floor === milestone) G.survGate.bossDown = true; // trio was this floor's gate key
   const T = CONFIG.trio, milestone = G.trio.milestone;
   const b = Math.round((T.coinBase + T.coinPerCycle * (G.trio.cycle - 1)) * G.diff.mult);
   bankCoins(b);
@@ -2366,10 +2554,12 @@ function updateSurvival(dt){
   const newFloor = Math.floor(depth / S.floorDepth);
   if (newFloor > G.floor){
     G.floor = newFloor;
+    G.floorCrystals = 0; // the descent-gate quota counts crystals collected ON the new floor
     const newStratum = Math.floor(newFloor / S.floorsPerStratum);
     if (newStratum > G.stratum) onStratumCross(newStratum, newFloor);
     updateObjective();
   }
+  updateSurvivalGate();
   G.spawnT -= dt;
   const alive = G.hunters.reduce((n, h) => n + (h.dead ? 0 : 1), 0);
   if (G.spawnT <= 0 && alive < S.maxHunters){
@@ -2547,7 +2737,9 @@ function updatePlayer(dt){
   const speedFrac = maxSp > 0 ? sp / maxSp : 0;
   G.noisePulse = Math.max(0, G.noisePulse - CONFIG.sonar.noiseDecay * dt);
   G.noise = clamp(G.noisePulse * 0.7 + speedFrac * 55 * p.d.def.noiseMul, 0, 100);
-  const hearR = CONFIG.sonar.engineHearBase * p.d.def.noiseMul * (0.35 + 0.65 * speedFrac);
+  // engine hearing rides the same speedFrac × noiseMul product that drives the
+  // NOISE meter: full thrust carries ~30–35 m, drifting idle is near-silent
+  const hearR = Math.min(35, CONFIG.sonar.engineHearBase * p.d.def.noiseMul * (0.05 + 0.95 * Math.pow(speedFrac, 1.6)));
   if (hearR > 4) for (const h of G.hunters){
     if (h.dead || h.type.hearing <= 0) continue;
     const d = h.group.position.distanceTo(g.position);
@@ -2577,6 +2769,15 @@ function updateHUD(){
   $('m-batt').firstElementChild.style.width = clamp(p.batt / maxB * 100, 0, 100) + '%';
   $('noise-txt').textContent = Math.round(G.noise) + '%';
   $('m-noise').firstElementChild.style.width = G.noise + '%';
+  const heatRow = $('heat-row');
+  if (heatRow){
+    const heat = G.cannonHeat || 0;
+    $('heat-txt').textContent = G.cannonLock ? 'VENTING' : Math.round(heat) + '%';
+    const hb = $('m-heat').firstElementChild;
+    hb.style.width = heat + '%';
+    hb.style.background = G.cannonLock ? '#ff4d6d' : (heat > 70 ? '#ff7a4d' : '#ffb84d');
+    heatRow.style.opacity = (heat > 1 || G.cannonHeld) ? 1 : 0.25;
+  }
   $('coin-txt').textContent = SAVE.coins;
   $('depth-txt').textContent = G.mode === 'survival'
     ? Math.floor(Math.max(0, -p.group.position.y)) + ' m · FLOOR ' + G.floor
@@ -2624,6 +2825,7 @@ function animate(){
     updatePlayer(dt);
     updateHunters(dt);
     updateTorpedoes(dt);
+    updatePulseCannon(dt);
     updateHazardsAndPickups(dt);
     const bounds = G.mode === 'expedition' ? CONFIG.arena.radius - 15 : CONFIG.survival.shaftRadius - 10;
     for (const s of G.schools) s.update(dt, G.time, bounds);
