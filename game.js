@@ -30,8 +30,9 @@ const CONFIG = {
   senses: { proxBase: 20, phantomStealth: 0.6, investigateDur: 10, patrolSpeedMul: 0.45, patrolReach: 7 },
 
   // ---- economy (DESIGN.md audited numbers) ----
-  econ: { golden: 100, starBonus: { 2: 25, 3: 75 }, closeCall: 10, minuteBonus: 20,
-          stratumBonus: 10, cacheMin: 50, cacheMax: 150, cacheHull: 20, cellBatt: 30, patchHull: 15, ancientBounty: 150 },
+  econ: { // coin sources rebalanced ~5x DOWN 19 Nov (Akmal: payouts were so high a few runs bought endgame gear and killed the grind; shop prices unchanged)
+          golden: 40, starBonus: { 2: 10, 3: 30 }, closeCall: 5, minuteBonus: 4,
+          stratumBonus: 5, cacheMin: 8, cacheMax: 20, cacheHull: 20, cellBatt: 30, patchHull: 15, ancientBounty: 75 },
 
   // ---- submarines ----
   subs: {
@@ -68,23 +69,23 @@ const CONFIG = {
 
   // ---- zones (data-driven; one arena system, re-tinted per zone) ----
   zones: [
-    { id:1, name:'The Shelf',     depth:[60,160],    crystalValue:5,  crystals:12, escape:20, rec:'Minnow',
+    { id:1, name:'The Shelf',     depth:[60,160],    crystalValue:2,  crystals:12, escape:10, rec:'Minnow',
       mission:{ type:'collect', quota:7 },  hunters:['stalker'], hunterSpeedMul:0.7, mines:0, jellies:5,
       tint:{ water:0x06222e, fog:0x04161d, accent:0x35e0c8 }, decor:'rocks',
       desc:'Shallow training trench. One slow hunter.' },
-    { id:2, name:'Kelp Ruins',    depth:[160,320],   crystalValue:10, crystals:14, escape:40, rec:'Minnow or Barracuda',
+    { id:2, name:'Kelp Ruins',    depth:[160,320],   crystalValue:4, crystals:14, escape:20, rec:'Minnow or Barracuda',
       mission:{ type:'rescue' },            hunters:['stalker','skitter'], hunterSpeedMul:0.9, mines:0, jellies:7,
       tint:{ water:0x0a2e1e, fog:0x061a10, accent:0x59e08a }, decor:'pillars',
       desc:'A stranded mini-sub waits among the pillars.' },
-    { id:3, name:'The Wreck Field', depth:[320,520], crystalValue:20, crystals:16, escape:80, rec:'Barracuda',
+    { id:3, name:'The Wreck Field', depth:[320,520], crystalValue:8, crystals:16, escape:40, rec:'Barracuda',
       mission:{ type:'nests', nests:3 },    hunters:['stalker','skitter','brute','skitter'], hunterSpeedMul:1.0, mines:5, jellies:9,
       tint:{ water:0x1c1410, fog:0x120c08, accent:0xe08a4d }, decor:'wreck',
       desc:'Mines and hunter nests among the wrecks.' },
-    { id:4, name:'Magenta Deep',  depth:[520,780],   crystalValue:35, crystals:18, escape:150, rec:'Phantom',
+    { id:4, name:'Magenta Deep',  depth:[520,780],   crystalValue:14, crystals:18, escape:75, rec:'Phantom',
       mission:{ type:'survive', time:75 },  hunters:['stalker','skitter','sentry','brute','stalker'], hunterSpeedMul:1.25, mines:6, jellies:10,
       tint:{ water:0x2a0a24, fog:0x1a0616, accent:0xe05ad0 }, decor:'crystals',
       desc:'A sentry listens here. Survive the timer.' },
-    { id:5, name:'The Abyss Gate', depth:[780,1100], crystalValue:60, crystals:20, escape:300, rec:'Leviathan',
+    { id:5, name:'The Abyss Gate', depth:[780,1100], crystalValue:24, crystals:20, escape:150, rec:'Leviathan',
       mission:{ type:'collect', quota:11 }, hunters:['stalker','skitter','brute','sentry','lurker','skitter'], hunterSpeedMul:1.15, mines:7, jellies:12,
       tint:{ water:0x12081f, fog:0x0a0414, accent:0x8a6aff }, decor:'gate',
       desc:'Everything hunts here. Reach the final gate.' },
@@ -137,7 +138,7 @@ const CONFIG = {
     stratumDepth: 400, floorDepth: 40, floorsPerStratum: 10,
     spawnStart: 16, spawnMin: 6, spawnDecay: 0.97, maxHunters: 8,
     collapseStart: 90, collapseBase: 1.15, boonEvery: 60, ancientEvery: 300,
-    crystalBase: 5, crystalPerStratum: 3, bandEvery: 40, shaftRadius: 150,
+    crystalBase: 2, crystalPerStratum: 1, bandEvery: 40, shaftRadius: 150,
     gateQuota: 3, // crystals to collect ON a normal floor to open its descent gate (+1 per stratum)
   },
 
@@ -152,7 +153,7 @@ const CONFIG = {
       swift:    { name:'SWIFT',    desc:'Much faster, slightly fragile.' },
     },
     armoredDmgMul: 0.5, swiftSpeedMul: 1.45, swiftHpMul: 0.8, shriekEvery: 5,
-    coinBase: 120, coinPerStratum: 60, warnBefore: 3, spawnBelow: 55,
+    coinBase: 60, coinPerStratum: 30, warnBefore: 3, spawnBelow: 55,
   },
 
   // ---- Boss Trio "The Three Guardians" (floors 50/100/150... replace the Warden) ----
@@ -161,7 +162,7 @@ const CONFIG = {
     alpha: { scale:1.5, hp:6,  speed:19, dmg:16 },   // hunter.glb — fast, persistent
     wall:  { scale:1.7, hp:14, speed:9,  dmg:25 },   // hunter-brute.glb — tank
     eye:   { scale:1.2, hp:5,  dmg:10, pingRadius:70, pingEvery:4.5 }, // hunter-sentry.glb — exposes you
-    coinBase: 500, coinPerCycle: 350,
+    coinBase: 150, coinPerCycle: 75,
   },
 
   // ---- boons (survival draft) ----
