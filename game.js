@@ -822,7 +822,7 @@ function registerReveal(root, opts={}){
         e: m.emissive ? m.emissive.clone() : null, ei: (m.emissiveIntensity !== undefined ? m.emissiveIntensity : 1) });
     }
   });
-  root.userData.reveal = { at: -1e9, entries, min: (opts.min !== undefined ? opts.min : 0.05), dur: CONFIG.sonar.revealDur, _f: -1 };
+  root.userData.reveal = { at: -1e9, entries, min: (opts.min !== undefined ? opts.min : 0.05), dur: CONFIG.sonar.revealDur, prox: opts.prox || 0, _f: -1 };
   revealables.push(root);
   return root;
 }
@@ -831,7 +831,16 @@ function updateReveal(now){
     const rv = r.userData.reveal; if (!rv) continue;
     let k = 0;
     if (now >= rv.at) k = Math.max(0, 1 - (now - rv.at) / rv.dur);
-    const f = rv.min + (1 - rv.min) * k;
+    let f = rv.min + (1 - rv.min) * k;
+    // Proximity floor (Akmal playtest 19 Nov): objects near the sub never
+    // fade to invisible when the sonar memory decays — the old collective
+    // fade read as "all objects vanish" mid-swim, and a rock you had just
+    // passed was simply gone. Distant objects still sink into the dark.
+    if (rv.prox && player){
+      const d = r.position.distanceTo(player.group.position);
+      const pf = clamp(1 - d / rv.prox, 0, 1);
+      f = Math.max(f, 0.3 + 0.7 * pf * pf);
+    }
     if (Math.abs(f - rv._f) < 0.012) continue;
     rv._f = f;
     for (const e of rv.entries){
@@ -1396,7 +1405,7 @@ function spawnCrystal(scene, pos, value, golden = false){
   if (golden) group.scale.setScalar(1.35);
   group.position.copy(pos);
   scene.add(group);
-  registerReveal(group, { min: 0.04 });
+  registerReveal(group, { min: 0.04, prox: 24 });
   if (golden) tintRevealEntries(group, 0xffc93a, 0.85);
   // Dimmer, sonar-driven halo (was scale 8/11 at full opacity — visible across the
   // arena). Now the halo's brightness is driven by the ping-reveal factor in the
@@ -1464,7 +1473,7 @@ function spawnCache(scene, pos){
   group.add(box);
   const lid = glowBall(0.4, 0xffd76a); lid.position.y = 1.15; group.add(lid);
   group.position.copy(pos); scene.add(group);
-  registerReveal(group, { min: 0.1 });
+  registerReveal(group, { min: 0.1, prox: 26 });
   const c = { group, taken: false, phase: rand(0, Math.PI*2) };
   if (G && G.mode === 'survival') c.floor = survFloorOf(pos.y);
   if (!G.caches) G.caches = [];
@@ -1496,7 +1505,7 @@ function spawnPickup(scene, pos, kind){
   group.add(halo);
   group.position.copy(pos);
   scene.add(group);
-  registerReveal(group, { min: 0.05 });
+  registerReveal(group, { min: 0.05, prox: 24 });
   const p = { group, kind, taken: false, baseY: pos.y, phase: rand(0, Math.PI * 2), halo, haloBase: 0.4, haloScale: 3.0 };
   if (G && G.mode === 'survival') p.floor = survFloorOf(pos.y);
   if (!G.pickups) G.pickups = [];
@@ -2241,6 +2250,10 @@ const BAND_LAVA_MAT = std(0x1c1712, { roughness: 1, flatShading: true });
 const BAND_ROCK_MAT = std(0x1c2a30, { roughness: 0.95 });
 function ensureBands(){
   const S = CONFIG.survival, py = player.group.position.y;
+  // Rock colliders (spheres) for the player push-out in updatePlayer —
+  // band rocks used to be ghost geometry the sub swam straight through.
+  if (!G.colliders) G.colliders = [];
+  const addCollider = (x, y, z, rad) => G.colliders.push({ x, y, z, rad });
   while (G.bandY > py - 290){
     G.bandY -= S.bandEvery;
     const y = G.bandY + rand(-11, 11);
@@ -2267,19 +2280,20 @@ function ensureBands(){
       rock.position.set(rand(-6, 6), rand(-3, 3), rand(-6, 6));
       cg.add(rock);
       const wr = { x: anchor.x + rock.position.x, y: anchor.y + rock.position.y, z: anchor.z + rock.position.z, rad };
-      bandRocks.push(wr); clusterRocks.push(wr);
+      bandRocks.push(wr); clusterRocks.push(wr); addCollider(wr.x, wr.y, wr.z, wr.rad);
     }
     for (let i = 0; i < 5; i++) addKelp(cg, BAND_KELP_MAT, rand(-5, 5), -3, rand(-5, 5), 0x7fe0ff);
-    gameScene.add(registerReveal(cg, { min: 0.13 }));
+    gameScene.add(registerReveal(cg, { min: 0.2, prox: 34 }));
     if (!G.rocks) G.rocks = []; G.rocks.push(cg);
     if (Math.random() < 0.5){ // loose rock rolled BEFORE the crystals so they can clearance-check against it too
       const rad = rand(4, 10);
       const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(rad, 0), std(0x1c2a30, { roughness: 0.95 }));
       const a = rand(0, Math.PI*2), r = rand(60, S.shaftRadius - 10);
       rock.position.set(Math.cos(a)*r, y, Math.sin(a)*r);
-      gameScene.add(registerReveal(rock, { min: 0.13 }));
+      gameScene.add(registerReveal(rock, { min: 0.2, prox: 30 }));
       G.rocks.push(rock);
       bandRocks.push({ x: rock.position.x, y: rock.position.y, z: rock.position.z, rad });
+      addCollider(rock.position.x, rock.position.y, rock.position.z, rad);
     }
     // Floor theme set piece (see FLOOR_THEMES): one themed group per band,
     // culled with the band via G.rocks exactly like the guard cluster. The
@@ -2338,9 +2352,10 @@ function ensureBands(){
         tg.add(ember);
       }
     }
-    gameScene.add(registerReveal(tg, { min: 0.13 }));
+    gameScene.add(registerReveal(tg, { min: 0.2, prox: 42 }));
     G.rocks.push(tg);
     bandRocks.push({ x: tAnchor.x, y: tAnchor.y, z: tAnchor.z, rad: 11 });
+    addCollider(tAnchor.x, tAnchor.y, tAnchor.z, 11);
     // Theme SCATTER (Akmal 19 Nov, from his playtest video): the centrepiece
     // alone reads as one patch in a 300 m shaft, so the theme's ambient
     // elements are ALSO spread across the whole floor slice at low density —
@@ -2350,14 +2365,16 @@ function ensureBands(){
     const scat = () => { const a = rand(0, Math.PI * 2), r = rand(18, 135); return { x: Math.cos(a) * r, z: Math.sin(a) * r }; };
     if (theme.id === 'wreck'){
       for (let i = 0; i < 8; i++){
-        const p = scat(), dr = new THREE.Mesh(new THREE.DodecahedronGeometry(rand(1.2, 3), 0), BAND_ROCK_MAT);
+        const p = scat(), drR = rand(1.2, 3), dr = new THREE.Mesh(new THREE.DodecahedronGeometry(drR, 0), BAND_ROCK_MAT);
         dr.position.set(p.x, rand(2, 30), p.z); dr.rotation.set(rand(0, 3), rand(0, 3), rand(0, 3));
         sg.add(dr);
+        addCollider(p.x, G.bandY + dr.position.y, p.z, drR);
       }
       for (let i = 0; i < 3; i++){
         const p = scat(), barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 2.1, 9), BAND_WRECK_MAT);
         barrel.position.set(p.x, rand(2, 28), p.z); barrel.rotation.set(Math.PI / 2 + rand(-0.3, 0.3), 0, rand(0, 3));
         sg.add(barrel);
+        addCollider(p.x, G.bandY + barrel.position.y, p.z, 1.3);
       }
     } else if (theme.id === 'kelp'){
       for (let i = 0; i < 12; i++){
@@ -2374,11 +2391,13 @@ function ensureBands(){
         drum.rotation.z = Math.PI / 2; drum.rotation.y = rand(0, 3);
         drum.position.set(p.x, rand(2, 26), p.z);
         sg.add(drum);
+        addCollider(p.x, G.bandY + drum.position.y, p.z, 1.7);
       }
       for (let i = 0; i < 3; i++){
         const p = scat(), h = rand(2, 5), stub = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.4, h, 8), BAND_STONE_MAT);
         stub.position.set(p.x, rand(2, 24), p.z); stub.rotation.z = rand(-0.15, 0.15);
         sg.add(stub);
+        addCollider(p.x, G.bandY + stub.position.y, p.z, 1.6);
       }
     } else { // vent
       for (let i = 0; i < 3; i++){
@@ -2386,15 +2405,16 @@ function ensureBands(){
         sg.add(makeBubbleVent(p.x, rand(1, 8), p.z));
       }
       for (let i = 0; i < 5; i++){
-        const p = scat(), vr = new THREE.Mesh(new THREE.DodecahedronGeometry(rand(1.5, 3.2), 0), BAND_LAVA_MAT);
+        const p = scat(), vrR = rand(1.5, 3.2), vr = new THREE.Mesh(new THREE.DodecahedronGeometry(vrR, 0), BAND_LAVA_MAT);
         vr.position.set(p.x, rand(2, 28), p.z);
         sg.add(vr);
+        addCollider(p.x, G.bandY + vr.position.y, p.z, vrR);
         const ember = glowBall(0.3, 0xff6a2a);
         ember.position.set(p.x, vr.position.y + 1, p.z);
         sg.add(ember);
       }
     }
-    gameScene.add(registerReveal(sg, { min: 0.13 }));
+    gameScene.add(registerReveal(sg, { min: 0.2, prox: 30 }));
     G.rocks.push(sg);
     const clearOfRocks = (p, margin) => { for (const rk of bandRocks){ const dx = p.x - rk.x, dy = p.y - rk.y, dz = p.z - rk.z; if (dx*dx + dy*dy + dz*dz < (rk.rad + margin) * (rk.rad + margin)) return false; } return true; };
     const guarded = [];
@@ -2484,6 +2504,7 @@ function ensureBands(){
       if (grp.position.y > py + 110 && !item.taken && !item.dead){ removeEntity(grp); list.splice(i, 1); }
     }
   }
+  if (G.colliders) for (let i = G.colliders.length - 1; i >= 0; i--) if (G.colliders[i].y > py + 110) G.colliders.splice(i, 1);
 }
 function startSurvival(diffId){
   revealables = [];
@@ -3501,6 +3522,25 @@ function updatePlayer(dt){
     const S = CONFIG.survival, horiz = Math.hypot(g.position.x, g.position.z);
     if (horiz > S.shaftRadius){ const s = S.shaftRadius / horiz; g.position.x *= s; g.position.z *= s; }
     if (g.position.y > 6) g.position.y = 6;
+  }
+  // Rock collision (Survival only): sphere push-out against the band
+  // colliders, so the sub slides along rock faces instead of ghosting
+  // through them (Akmal playtest 19 Nov: "kita bisa nembus batu").
+  // Colliders near the gate are skipped — the gate approach never blocks.
+  if (G.mode === 'survival' && G.colliders){
+    const gp = (G.gate && G.gate.pos) ? G.gate.pos : null;
+    for (const c of G.colliders){
+      if (gp){ const gdx = c.x - gp.x, gdy = c.y - gp.y, gdz = c.z - gp.z; if (gdx*gdx + gdy*gdy + gdz*gdz < 256) continue; }
+      const dx = g.position.x - c.x, dy = g.position.y - c.y, dz = g.position.z - c.z;
+      const rr = c.rad + p.radius;
+      const d2 = dx*dx + dy*dy + dz*dz;
+      if (d2 < rr * rr && d2 > 0.0001){
+        const d = Math.sqrt(d2), push = (rr - d) / d;
+        g.position.x += dx * push; g.position.y += dy * push; g.position.z += dz * push;
+        const vn = (p.vel.x * dx + p.vel.y * dy + p.vel.z * dz) / d;
+        if (vn < 0){ p.vel.x -= vn * dx / d; p.vel.y -= vn * dy / d; p.vel.z -= vn * dz / d; }
+      }
+    }
   }
   const roll = clamp(-strafe * 0.35 + (keys['ArrowLeft'] ? 0.25 : 0) + (keys['ArrowRight'] ? -0.25 : 0), -0.6, 0.6);
   g.lookAt(g.position.clone().add(fwd));
