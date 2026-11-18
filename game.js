@@ -1526,8 +1526,8 @@ function spawnGate(scene, pos){
 // ============================ ENVIRONMENT & ATMOSPHERE ============================
 // Visual-only layer: glow sprites, marine snow, trench dressing.
 // Rebuilt per dive; updated once per frame from the main loop.
-const envFx = { kelp: [], pulses: [], snow: null, shaft: null, seabed: null, vents: [] };
-function resetEnvFx(){ envFx.kelp.length = 0; envFx.pulses.length = 0; envFx.snow = null; envFx.shaft = null; envFx.seabed = null; envFx.vents.length = 0; }
+const envFx = { kelp: [], pulses: [], snow: null, shaft: null, seabed: null, vents: [], dressColliders: null };
+function resetEnvFx(){ envFx.kelp.length = 0; envFx.pulses.length = 0; envFx.snow = null; envFx.shaft = null; envFx.seabed = null; envFx.vents.length = 0; envFx.dressColliders = null; }
 
 let _glowTex = null;
 function glowTexture(){
@@ -2070,8 +2070,10 @@ function makeAnemonePatch(){
 // Survival shaft dressing: a periodic rock wall (50 m bands) that snaps along
 // with the descent, PLUS per-floor dressing so no floor reads empty: instanced
 // spires/pillars for verticality, mid-field outcrops carrying coral + kelp
-// forests, and one rotating set piece per floor. Decoration only — no
-// colliders, no gameplay effect. Deeper bands run sparser but bigger.
+// forests, and one rotating set piece per floor. In-volume pieces carry
+// LOCAL-space capsule colliders (envFx.dressColliders; world y adds the
+// shaft snap) — playtest 19 Nov: the sub ghosted through these pillars.
+// Deeper bands run sparser but bigger.
 function addSurvivalDressing(scene){
   resetEnvFx();
   const S = CONFIG.survival;
@@ -2080,6 +2082,7 @@ function addSurvivalDressing(scene){
   const batch2 = rockBatch(mat);  // set-piece base rocks: 1 more
   const BAND = 50, BANDS = 8;
   const outcrops = []; // {x, y(top), z} — coral / kelp / vent anchors in the play volume
+  const dressCols = []; // {x, z, yBot, yTop, rad} LOCAL colliders for in-volume dressing
   for (let b = 0; b < BANDS; b++){
     const top = -b * BAND, deep = b >= 4, big = deep ? 1.4 : 1;
     for (let i = 0; i < 26; i++){
@@ -2087,35 +2090,42 @@ function addSurvivalDressing(scene){
       batch.add(Math.cos(a) * r, -b * BAND - rand(0, BAND), Math.sin(a) * r, s, s * rand(0.9, 1.4), s);
     }
     for (let i = 0; i < 3; i++){
-      const a = rand(0, Math.PI * 2), r = S.shaftRadius - rand(2, 10), s = rand(4, 8);
-      batch.add(Math.cos(a) * r, -b * BAND - rand(6, 44), Math.sin(a) * r, s, s * 0.7, s);
+      const a = rand(0, Math.PI * 2), r = S.shaftRadius - rand(2, 10), s = rand(4, 8), y = -b * BAND - rand(6, 44), x = Math.cos(a) * r, z = Math.sin(a) * r;
+      batch.add(x, y, z, s, s * 0.7, s);
+      dressCols.push({ x, z, yBot: y - s * 0.35, yTop: y + s * 0.35, rad: s * 0.5 });
     }
     // rock spires hugging the wall — tall silhouettes that break its flatness
     for (let i = 0, n = deep ? 3 : 4; i < n; i++){
-      const a = rand(0, Math.PI * 2), r = S.shaftRadius - rand(10, 24), h = rand(15, 34) * big;
-      batch.add(Math.cos(a) * r, top - rand(6, 30), Math.sin(a) * r, rand(2.6, 4.2) * big, h, rand(2.6, 4.2) * big);
+      const a = rand(0, Math.PI * 2), r = S.shaftRadius - rand(10, 24), h = rand(15, 34) * big, w = rand(2.6, 4.2) * big;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r, yc = top - rand(6, 30);
+      batch.add(x, yc, z, w, h, w);
+      dressCols.push({ x, z, yBot: yc - h / 2, yTop: yc + h / 2, rad: w * 0.5 });
     }
     // free-standing pillars inside the play volume (r ≥ 76: clear of the gate)
     for (let i = 0, n = deep ? 2 : 3; i < n; i++){
-      const a = rand(0, Math.PI * 2), r = rand(76, 118), h = rand(11, 24) * big;
+      const a = rand(0, Math.PI * 2), r = rand(76, 118), h = rand(11, 24) * big, w = rand(3, 5) * big;
       const x = Math.cos(a) * r, z = Math.sin(a) * r, yc = top - rand(10, 34);
-      batch.add(x, yc, z, rand(3, 5) * big, h, rand(3, 5) * big);
+      batch.add(x, yc, z, w, h, w);
       outcrops.push({ x, y: yc + h * 0.5, z }); // pillar tops carry coral/kelp too — raised glowing outcrops at eye level
+      dressCols.push({ x, z, yBot: yc - h / 2, yTop: yc + h / 2, rad: w * 0.5 });
     }
     // floating islets + a small cluster per band: mid-water silhouettes that
     // layer through the fog INSIDE the view cone (the column read bare)
     for (let i = 0; i < 3; i++){
-      const a = rand(0, Math.PI * 2), r = rand(30, 105), s = rand(3.5, 8.5) * big;
-      batch.add(Math.cos(a) * r, top - rand(4, 46), Math.sin(a) * r, s, s * rand(0.6, 1), s);
+      const a = rand(0, Math.PI * 2), r = rand(30, 105), s = rand(3.5, 8.5) * big, y = top - rand(4, 46), x = Math.cos(a) * r, z = Math.sin(a) * r;
+      batch.add(x, y, z, s, s * rand(0.6, 1), s);
+      dressCols.push({ x, z, yBot: y - s * 0.5, yTop: y + s * 0.5, rad: s * 0.5 });
     }
     { const a = rand(0, Math.PI * 2), r = rand(40, 100), cx = Math.cos(a) * r, cz = Math.sin(a) * r, cy = top - rand(6, 44);
-      for (let i = 0; i < 3; i++){ const s = rand(1.8, 4) * big; batch.add(cx + rand(-6, 6), cy + rand(-4, 4), cz + rand(-6, 6), s, s * 0.8, s); } }
+      for (let i = 0; i < 3; i++){ const s = rand(1.8, 4) * big; batch.add(cx + rand(-6, 6), cy + rand(-4, 4), cz + rand(-6, 6), s, s * 0.8, s); }
+      dressCols.push({ x: cx, z: cz, yBot: cy - 5, yTop: cy + 5, rad: 6 }); }
     // mid-field outcrops (r ≥ 74: clear of the gate) — anchors for the flora
     for (let i = 0; i < 3; i++){
       const a = rand(0, Math.PI * 2), r = rand(74, 122), s = rand(4.5, 8) * big, y = top - rand(8, 42);
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       batch.add(x, y, z, s, s * 0.75, s);
       outcrops.push({ x, y: y + s * 0.55, z });
+      dressCols.push({ x, z, yBot: y - s * 0.4, yTop: y + s * 0.4, rad: s * 0.5 });
     }
   }
   const grp = new THREE.Group();
@@ -2141,6 +2151,7 @@ function addSurvivalDressing(scene){
       w.position.set(Math.cos(a) * r, floorTop - rand(S.floorDepth * 0.52, S.floorDepth * 0.76), Math.sin(a) * r);
       w.rotation.y = rand(0, Math.PI * 2);
       grp.add(w);
+      dressCols.push({ x: w.position.x, z: w.position.z, yBot: w.position.y - 4, yTop: w.position.y + 4, rad: 8 });
     } else { // glowing anemone patch on the wall
       const a = rand(0, Math.PI * 2), r = rand(128, 142), x = Math.cos(a) * r, z = Math.sin(a) * r, y = floorTop - rand(S.floorDepth * 0.24, S.floorDepth * 0.8);
       batch2.add(x, y - 1.2, z, 4.5, 2.6, 4.5);
@@ -2177,13 +2188,14 @@ function addSurvivalDressing(scene){
     const seabedGrp = new THREE.Group();
     seabedGrp.add(new THREE.Mesh(mergeGeometries(ringGeos), SEABED_MAT));
     scene.add(seabedGrp);
-    registerReveal(seabedGrp, { min: 0.24 });
+    registerReveal(seabedGrp, { min: 0.45 });
     envFx.seabed = seabedGrp;
   }
   addSurvivalFlora(grp, outcrops);
   scene.add(grp);
-  registerReveal(grp, { min: 0.24 });
+  registerReveal(grp, { min: 0.45 });
   envFx.shaft = grp;
+  envFx.dressColliders = dressCols;
   addMarineSnow(scene);
 }
 
@@ -3532,6 +3544,24 @@ function updatePlayer(dt){
     for (const c of G.colliders){
       if (gp){ const gdx = c.x - gp.x, gdy = c.y - gp.y, gdz = c.z - gp.z; if (gdx*gdx + gdy*gdy + gdz*gdz < 256) continue; }
       const dx = g.position.x - c.x, dy = g.position.y - c.y, dz = g.position.z - c.z;
+      const rr = c.rad + p.radius;
+      const d2 = dx*dx + dy*dy + dz*dz;
+      if (d2 < rr * rr && d2 > 0.0001){
+        const d = Math.sqrt(d2), push = (rr - d) / d;
+        g.position.x += dx * push; g.position.y += dy * push; g.position.z += dz * push;
+        const vn = (p.vel.x * dx + p.vel.y * dy + p.vel.z * dz) / d;
+        if (vn < 0){ p.vel.x -= vn * dx / d; p.vel.y -= vn * dy / d; p.vel.z -= vn * dz / d; }
+      }
+    }
+  }
+  // Dressing collision (Survival only): capsule push-out against the shaft
+  // dressing's in-volume pieces — pillars, spires, islets, outcrops, wrecks.
+  // Colliders are LOCAL to the shaft group; world y adds the 50 m snap.
+  if (G.mode === 'survival' && envFx.dressColliders && envFx.shaft){
+    const snapY = envFx.shaft.position.y;
+    for (const c of envFx.dressColliders){
+      const cy = clamp(g.position.y, c.yBot + snapY, c.yTop + snapY);
+      const dx = g.position.x - c.x, dy = g.position.y - cy, dz = g.position.z - c.z;
       const rr = c.rad + p.radius;
       const d2 = dx*dx + dy*dy + dz*dz;
       if (d2 < rr * rr && d2 > 0.0001){
