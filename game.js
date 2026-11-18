@@ -31,7 +31,7 @@ const CONFIG = {
 
   // ---- economy (DESIGN.md audited numbers) ----
   econ: { golden: 100, starBonus: { 2: 25, 3: 75 }, closeCall: 10, minuteBonus: 20,
-          stratumBonus: 10, cacheMin: 50, cacheMax: 150, cacheHull: 20, ancientBounty: 150 },
+          stratumBonus: 10, cacheMin: 50, cacheMax: 150, cacheHull: 20, cellBatt: 30, patchHull: 15, ancientBounty: 150 },
 
   // ---- submarines ----
   subs: {
@@ -134,10 +134,10 @@ const CONFIG = {
       { name:'Stratum V — The Violet',    tint:0x12081f, accent:0x8a6aff },
       { name:'Stratum VI — True Abyss',   tint:0x050508, accent:0x5a7aff },
     ],
-    stratumDepth: 250, floorDepth: 25, floorsPerStratum: 10,
+    stratumDepth: 400, floorDepth: 40, floorsPerStratum: 10,
     spawnStart: 16, spawnMin: 6, spawnDecay: 0.97, maxHunters: 8,
     collapseStart: 90, collapseBase: 1.15, boonEvery: 60, ancientEvery: 300,
-    crystalBase: 5, crystalPerStratum: 3, bandEvery: 25, shaftRadius: 150,
+    crystalBase: 5, crystalPerStratum: 3, bandEvery: 40, shaftRadius: 150,
     gateQuota: 3, // crystals to collect ON a normal floor to open its descent gate (+1 per stratum)
   },
 
@@ -1377,7 +1377,7 @@ function spawnHunter(scene, typeId, pos, opts = {}){
   G.hunters.push(h);
   return h;
 }
-// Survival floors are stacked 25 m apart in one shaft, so a crystal of the
+// Survival floors are stacked 40 m apart in one shaft, so a crystal of the
 // floor BELOW used to be visible (and ping-revealed) from the floor above —
 // players chased it thinking it counted toward their gate quota. Survival
 // crystals/caches therefore carry their floor (from their actual depth) and
@@ -1389,6 +1389,7 @@ function survCullCollectibles(){
   if (!G || G.mode !== 'survival') return;
   for (const c of G.crystals) if (!c.taken && c.floor !== undefined) c.group.visible = (c.floor === G.floor);
   if (G.caches) for (const c of G.caches) if (!c.taken && c.floor !== undefined) c.group.visible = (c.floor === G.floor);
+  if (G.pickups) for (const c of G.pickups) if (!c.taken && c.floor !== undefined) c.group.visible = (c.floor === G.floor);
 }
 function spawnCrystal(scene, pos, value, golden = false){
   const group = makeAsset('crystal');
@@ -1470,6 +1471,38 @@ function spawnCache(scene, pos){
   G.caches.push(c);
   return c;
 }
+function spawnPickup(scene, pos, kind){
+  // Collectible items (Akmal 19 Nov): battery cells and hull patches that
+  // float in the water column and are gathered by swimming through them,
+  // exactly like crystals. Survival-only (spawned per floor by
+  // ensureBands); they carry their floor and cull like crystals/caches.
+  const group = new THREE.Group();
+  let haloHex;
+  if (kind === 'cell'){
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.55, 1.1, 4, 10), std(0x8a6d1f, { metalness: 0.6, roughness: 0.35 }));
+    body.rotation.z = Math.PI / 2;
+    group.add(body);
+    group.add(glowBall(0.42, 0xffe066));
+    haloHex = 0xffe066;
+  } else { // patch — a repair kit: orange box with a white cross
+    group.add(new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 0.6), std(0xb8452a, { roughness: 0.6, metalness: 0.2 })));
+    const crossMat = std(0xf2f2f2, { roughness: 0.5 });
+    group.add(new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.3, 0.68), crossMat));
+    group.add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.95, 0.68), crossMat));
+    group.add(glowBall(0.3, 0xff8a5c));
+    haloHex = 0xff8a5c;
+  }
+  const halo = makeGlowSprite(haloHex, 3.0, 0.05);
+  group.add(halo);
+  group.position.copy(pos);
+  scene.add(group);
+  registerReveal(group, { min: 0.05 });
+  const p = { group, kind, taken: false, baseY: pos.y, phase: rand(0, Math.PI * 2), halo, haloBase: 0.4, haloScale: 3.0 };
+  if (G && G.mode === 'survival') p.floor = survFloorOf(pos.y);
+  if (!G.pickups) G.pickups = [];
+  G.pickups.push(p);
+  return p;
+}
 function spawnGate(scene, pos){
   const group = makeAsset('gate');
   group.position.copy(pos);
@@ -1484,8 +1517,8 @@ function spawnGate(scene, pos){
 // ============================ ENVIRONMENT & ATMOSPHERE ============================
 // Visual-only layer: glow sprites, marine snow, trench dressing.
 // Rebuilt per dive; updated once per frame from the main loop.
-const envFx = { kelp: [], pulses: [], snow: null, shaft: null, vents: [] };
-function resetEnvFx(){ envFx.kelp.length = 0; envFx.pulses.length = 0; envFx.snow = null; envFx.shaft = null; envFx.vents.length = 0; }
+const envFx = { kelp: [], pulses: [], snow: null, shaft: null, seabed: null, vents: [] };
+function resetEnvFx(){ envFx.kelp.length = 0; envFx.pulses.length = 0; envFx.snow = null; envFx.shaft = null; envFx.seabed = null; envFx.vents.length = 0; }
 
 let _glowTex = null;
 function glowTexture(){
@@ -1569,6 +1602,10 @@ function updateEnvironmentFx(dt){
     a.needsUpdate = true;
   }
   if (envFx.shaft) envFx.shaft.position.y = Math.round(pp.y / 50) * 50;
+  // The seabed rings live in their OWN group locked to the player's current
+  // floor (not the 50 m shaft snap): the current floor's base plane always
+  // has its ring, and no ring ever floats above it as a fake layer.
+  if (envFx.seabed) envFx.seabed.position.y = -survFloorOf(pp.y) * CONFIG.survival.floorDepth;
 }
 function smoothstep(a, b, x){ const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
 function tintAsset(root, hex, amt){
@@ -2045,12 +2082,12 @@ function addSurvivalDressing(scene){
       batch.add(Math.cos(a) * r, -b * BAND - rand(6, 44), Math.sin(a) * r, s, s * 0.7, s);
     }
     // rock spires hugging the wall — tall silhouettes that break its flatness
-    for (let i = 0, n = deep ? 2 : 3; i < n; i++){
+    for (let i = 0, n = deep ? 3 : 4; i < n; i++){
       const a = rand(0, Math.PI * 2), r = S.shaftRadius - rand(10, 24), h = rand(15, 34) * big;
       batch.add(Math.cos(a) * r, top - rand(6, 30), Math.sin(a) * r, rand(2.6, 4.2) * big, h, rand(2.6, 4.2) * big);
     }
     // free-standing pillars inside the play volume (r ≥ 76: clear of the gate)
-    for (let i = 0, n = deep ? 1 : 2; i < n; i++){
+    for (let i = 0, n = deep ? 2 : 3; i < n; i++){
       const a = rand(0, Math.PI * 2), r = rand(76, 118), h = rand(11, 24) * big;
       const x = Math.cos(a) * r, z = Math.sin(a) * r, yc = top - rand(10, 34);
       batch.add(x, yc, z, rand(3, 5) * big, h, rand(3, 5) * big);
@@ -2058,14 +2095,14 @@ function addSurvivalDressing(scene){
     }
     // floating islets + a small cluster per band: mid-water silhouettes that
     // layer through the fog INSIDE the view cone (the column read bare)
-    for (let i = 0; i < 2; i++){
+    for (let i = 0; i < 3; i++){
       const a = rand(0, Math.PI * 2), r = rand(30, 105), s = rand(3.5, 8.5) * big;
       batch.add(Math.cos(a) * r, top - rand(4, 46), Math.sin(a) * r, s, s * rand(0.6, 1), s);
     }
     { const a = rand(0, Math.PI * 2), r = rand(40, 100), cx = Math.cos(a) * r, cz = Math.sin(a) * r, cy = top - rand(6, 44);
       for (let i = 0; i < 3; i++){ const s = rand(1.8, 4) * big; batch.add(cx + rand(-6, 6), cy + rand(-4, 4), cz + rand(-6, 6), s, s * 0.8, s); } }
     // mid-field outcrops (r ≥ 74: clear of the gate) — anchors for the flora
-    for (let i = 0; i < 2; i++){
+    for (let i = 0; i < 3; i++){
       const a = rand(0, Math.PI * 2), r = rand(74, 122), s = rand(4.5, 8) * big, y = top - rand(8, 42);
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       batch.add(x, y, z, s, s * 0.75, s);
@@ -2079,24 +2116,24 @@ function addSurvivalDressing(scene){
   // sunken ships). They sit at r 78–118 so the ~19-unit hull keeps the gate
   // cylinder (r ≤ 62 + ring) structurally clear, in the floor's upper half.
   const wreckMat = std(0x2c3840, { roughness: 0.75, metalness: 0.5, flatShading: true });
-  for (let f = 0; f < BANDS * 2; f++){
-    const floorTop = -f * 25, type = f % 4;
+  for (let f = 0, nF = Math.ceil(BANDS * BAND / S.floorDepth); f < nF; f++){
+    const floorTop = -f * S.floorDepth, type = f % 4;
     if (type === 0){ // bubble vent — rooted on an outcrop of this floor when one is near
-      const anchor = outcrops.find(o => o.y < floorTop + 2 && o.y > floorTop - 27);
+      const anchor = outcrops.find(o => o.y < floorTop + 2 && o.y > floorTop - (S.floorDepth + 2));
       if (anchor) grp.add(makeBubbleVent(anchor.x, anchor.y, anchor.z));
       else {
         const a = rand(0, Math.PI * 2), r = rand(80, 118), x = Math.cos(a) * r, z = Math.sin(a) * r;
-        batch2.add(x, floorTop - 23.5, z, 4, 2, 4);
-        grp.add(makeBubbleVent(x, floorTop - 22.5, z));
+        batch2.add(x, floorTop - (S.floorDepth - 1.5), z, 4, 2, 4);
+        grp.add(makeBubbleVent(x, floorTop - (S.floorDepth - 2.5), z));
       }
     } else if (type === 1 || type === 3){ // shipwreck — lower half of the floor, resting toward the seabed
       const a = rand(0, Math.PI * 2), r = rand(78, 118);
       const w = makeShipwreck(wreckMat);
-      w.position.set(Math.cos(a) * r, floorTop - rand(13, 19), Math.sin(a) * r);
+      w.position.set(Math.cos(a) * r, floorTop - rand(S.floorDepth * 0.52, S.floorDepth * 0.76), Math.sin(a) * r);
       w.rotation.y = rand(0, Math.PI * 2);
       grp.add(w);
     } else { // glowing anemone patch on the wall
-      const a = rand(0, Math.PI * 2), r = rand(128, 142), x = Math.cos(a) * r, z = Math.sin(a) * r, y = floorTop - rand(6, 20);
+      const a = rand(0, Math.PI * 2), r = rand(128, 142), x = Math.cos(a) * r, z = Math.sin(a) * r, y = floorTop - rand(S.floorDepth * 0.24, S.floorDepth * 0.8);
       batch2.add(x, y - 1.2, z, 4.5, 2.6, 4.5);
       const an = makeAnemonePatch(); an.position.set(x, y, z); grp.add(an);
     }
@@ -2107,14 +2144,16 @@ function addSurvivalDressing(scene){
   // gates (r ≤ 62 + ring) sit in; spawnSurvivalGate adds a local disc with
   // the exact hole at the gate itself. Dune displacement is a smooth
   // deterministic function of position, so the merged rings have no seams.
-  // The loop starts at f = -2 (local Y +25 / 0) on purpose: this group snaps
-  // in 50 m steps (updateEnvFx), so on odd floors past their midpoint the
-  // player's own base plane sits at local 0 — without the two extra rings
-  // the terrain vanished from that plane and the gate disc floated 25 m
-  // above the visible seabed (Akmal playtest 19 Nov, floor 1 vs floor 0).
+  // The rings live in their OWN group (envFx.seabed), locked to the player's
+  // current floor in updateEnvFx — NOT in the 50 m-snapping shaft group.
+  // History (19 Nov playtests): inside the snapping group the ring vanished
+  // from odd floors' base planes (the gate disc floated); extra rings above
+  // fixed that but read as fake LAYERS stacked over the spawn floor. Locked
+  // to the floor, the current base plane always has its ring and no ring
+  // ever sits above it.
   {
-    const ringGeos = [];
-    for (let f = -2; f < BANDS * 2; f++){
+    const FD = S.floorDepth, ringGeos = [];
+    for (let f = 0, n = Math.ceil(BANDS * BAND / FD); f < n; f++){
       const g = new THREE.RingGeometry(74, 152, 48, 3);
       g.rotateX(-Math.PI / 2);
       const p = g.attributes.position;
@@ -2123,11 +2162,14 @@ function addSurvivalDressing(scene){
         if (r > 78 && r < 148) p.setY(i, Math.sin(x * 0.08) * Math.cos(z * 0.06) * 1.4);
       }
       g.computeVertexNormals();
-      g.translate(0, -f * 25 - 25, 0);
+      g.translate(0, -f * FD - FD, 0);
       ringGeos.push(g);
     }
-    const seabed = new THREE.Mesh(mergeGeometries(ringGeos), SEABED_MAT);
-    grp.add(seabed);
+    const seabedGrp = new THREE.Group();
+    seabedGrp.add(new THREE.Mesh(mergeGeometries(ringGeos), SEABED_MAT));
+    scene.add(seabedGrp);
+    registerReveal(seabedGrp, { min: 0.24 });
+    envFx.seabed = seabedGrp;
   }
   addSurvivalFlora(grp, outcrops);
   scene.add(grp);
@@ -2185,15 +2227,15 @@ function ensureBands(){
   const S = CONFIG.survival, py = player.group.position.y;
   while (G.bandY > py - 290){
     G.bandY -= S.bandEvery;
-    const y = G.bandY + rand(-7, 7);
-    // This band serves ONE floor: the 25 m slice directly above its base
-    // plane (bandY = −25·m serves floor m−1, slice y ∈ [bandY, bandY+25]).
+    const y = G.bandY + rand(-11, 11);
+    // This band serves ONE floor: the 40 m slice directly above its base
+    // plane (bandY = −40·m serves floor m−1, slice y ∈ [bandY, bandY+40]).
     // Crystals/caches sample INSIDE that slice with margins — the old
     // band-centred sampling straddled the boundary between two floors, so a
     // floor could spawn with fewer crystals than its gate quota (or with a
     // crystal embedded in the guard rocks) and be uncompletable.
     const servedFloor = survFloorOf(G.bandY) - 1;
-    const sliceY = () => G.bandY + rand(3.5, 15); // depth ∈ [25·servedFloor + 10, +21.5]: inside the floor, biased toward the seabed half (item 8 banding still wins — never outside the slice)
+    const sliceY = () => G.bandY + rand(5.6, 24); // depth ∈ [40·servedFloor + 16, +34.4]: inside the floor, biased toward the seabed half (item 8 banding still wins — never outside the slice)
     const bandRocks = []; // {x,y,z,rad} world-space, for crystal clearance sampling
     const clusterRocks = []; // the guard cluster's own rocks — guarded crystals sample against one of these
     // Guard feature (world-stable, culled with the band): a small rock cluster
@@ -2201,7 +2243,7 @@ function ensureBands(){
     // fetching them means working terrain, not a straight open-water swim.
     // The third crystal stays in the open for variety/readability.
     const ga = rand(0, Math.PI * 2), gr = rand(38, 112);
-    const anchor = new THREE.Vector3(Math.cos(ga) * gr, G.bandY + rand(4.5, 14), Math.sin(ga) * gr);
+    const anchor = new THREE.Vector3(Math.cos(ga) * gr, G.bandY + rand(7.2, 22.4), Math.sin(ga) * gr);
     const cg = new THREE.Group(); cg.position.copy(anchor);
     for (let i = 0, n = randi(2, 3); i < n; i++){
       const rad = rand(3, 7);
@@ -2211,10 +2253,10 @@ function ensureBands(){
       const wr = { x: anchor.x + rock.position.x, y: anchor.y + rock.position.y, z: anchor.z + rock.position.z, rad };
       bandRocks.push(wr); clusterRocks.push(wr);
     }
-    for (let i = 0; i < 3; i++) addKelp(cg, BAND_KELP_MAT, rand(-5, 5), -3, rand(-5, 5), 0x7fe0ff);
+    for (let i = 0; i < 5; i++) addKelp(cg, BAND_KELP_MAT, rand(-5, 5), -3, rand(-5, 5), 0x7fe0ff);
     gameScene.add(registerReveal(cg, { min: 0.13 }));
     if (!G.rocks) G.rocks = []; G.rocks.push(cg);
-    if (Math.random() < 0.3){ // loose rock rolled BEFORE the crystals so they can clearance-check against it too
+    if (Math.random() < 0.5){ // loose rock rolled BEFORE the crystals so they can clearance-check against it too
       const rad = rand(4, 10);
       const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(rad, 0), std(0x1c2a30, { roughness: 0.95 }));
       const a = rand(0, Math.PI*2), r = rand(60, S.shaftRadius - 10);
@@ -2234,7 +2276,7 @@ function ensureBands(){
           // + 1.2–2.8) puts the crystal just off that rock's face by
           // construction (tucked, never embedded), then clearance-check the rest.
           const rk = pick(clusterRocks), a2 = rand(0, Math.PI * 2), d = rk.rad + rand(1.2, 2.8);
-          cand = new THREE.Vector3(rk.x + Math.cos(a2) * d, Math.min(Math.max(rk.y + rand(-1.5, 2), G.bandY + 3.5), G.bandY + 22.5), rk.z + Math.sin(a2) * d);
+          cand = new THREE.Vector3(rk.x + Math.cos(a2) * d, Math.min(Math.max(rk.y + rand(-1.5, 2), G.bandY + 5.6), G.bandY + 36), rk.z + Math.sin(a2) * d);
           if (clearOfRocks(cand, 1.0)) pos = cand;
         } else {
           const a = rand(0, Math.PI*2), r = rand(22, S.shaftRadius - 28);
@@ -2244,7 +2286,7 @@ function ensureBands(){
       }
       if (!pos){ // by-construction clear: 16 from the anchor beats the cluster's max reach (offset 6 + radius 7 + clearance 2 = 15), y clamped into the slice
         const a3 = rand(0, Math.PI * 2);
-        pos = new THREE.Vector3(anchor.x + Math.cos(a3) * 16, Math.min(Math.max(anchor.y, G.bandY + 4.5), G.bandY + 22), anchor.z + Math.sin(a3) * 16);
+        pos = new THREE.Vector3(anchor.x + Math.cos(a3) * 16, Math.min(Math.max(anchor.y, G.bandY + 7.2), G.bandY + 35.2), anchor.z + Math.sin(a3) * 16);
       }
       const c = spawnCrystal(gameScene, pos, crystalValueNow());
       if (i < 2) guarded.push(c);
@@ -2274,15 +2316,36 @@ function ensureBands(){
       }
       if (!cpos){
         const a3 = rand(0, Math.PI * 2);
-        cpos = new THREE.Vector3(anchor.x + Math.cos(a3) * 16, Math.min(Math.max(anchor.y, G.bandY + 4.5), G.bandY + 22), anchor.z + Math.sin(a3) * 16);
+        cpos = new THREE.Vector3(anchor.x + Math.cos(a3) * 16, Math.min(Math.max(anchor.y, G.bandY + 7.2), G.bandY + 35.2), anchor.z + Math.sin(a3) * 16);
       }
       spawnCache(gameScene, cpos);
     }
-    if (Math.random() < 0.16) spawnCache(gameScene, new THREE.Vector3(rand(-95, 95), G.bandY + rand(4, 21), rand(-95, 95)));
-    if (Math.random() < 0.55) spawnJelly(gameScene, new THREE.Vector3(rand(-115, 115), y + rand(-4, 4), rand(-115, 115)), 0x7fe0ff);
-    if (Math.random() < 0.5) spawnJellyDrifter(gameScene, new THREE.Vector3(rand(-115, 115), y + rand(-5, 5), rand(-115, 115)), 0x7fe0ff);
+    if (Math.random() < 0.16) spawnCache(gameScene, new THREE.Vector3(rand(-95, 95), G.bandY + rand(6.4, 33.6), rand(-95, 95)));
+    // Collectible items (Akmal 19 Nov): one battery cell + one hull patch
+    // per floor, gathered exactly like crystals — sampled inside the slice,
+    // clear of the guard rocks, same by-construction fallback (offset 20 so
+    // fallbacks never stack on the crystal/cache spot). A 50% bonus item of
+    // a random kind keeps floors varied.
+    const spawnFloorPickup = (kind) => {
+      let ppos = null;
+      for (let t = 0; t < 20 && !ppos; t++){
+        const a = rand(0, Math.PI*2), r = rand(22, S.shaftRadius - 28);
+        const cand = new THREE.Vector3(Math.cos(a)*r, sliceY(), Math.sin(a)*r);
+        if (clearOfRocks(cand, 2.0)) ppos = cand;
+      }
+      if (!ppos){
+        const a3 = rand(0, Math.PI * 2);
+        ppos = new THREE.Vector3(anchor.x + Math.cos(a3) * 20, Math.min(Math.max(anchor.y, G.bandY + 7.2), G.bandY + 35.2), anchor.z + Math.sin(a3) * 20);
+      }
+      spawnPickup(gameScene, ppos, kind);
+    };
+    spawnFloorPickup('cell');
+    spawnFloorPickup('patch');
+    if (Math.random() < 0.5) spawnFloorPickup(Math.random() < 0.5 ? 'cell' : 'patch');
+    if (Math.random() < 0.85) spawnJelly(gameScene, new THREE.Vector3(rand(-115, 115), y + rand(-4, 4), rand(-115, 115)), 0x7fe0ff);
+    if (Math.random() < 0.8) spawnJellyDrifter(gameScene, new THREE.Vector3(rand(-115, 115), y + rand(-5, 5), rand(-115, 115)), 0x7fe0ff);
   }
-  for (const listName of ['crystals', 'jellies', 'caches', 'rocks', 'mines']){
+  for (const listName of ['crystals', 'jellies', 'caches', 'pickups', 'rocks', 'mines']){
     const list = G[listName]; if (!list) continue;
     for (let i = list.length - 1; i >= 0; i--){
       const item = list[i];
@@ -2406,8 +2469,15 @@ function fireEMP(){
   AudioSys.emp();
   toast(hit ? '⚡ EMP — ' + hit + ' hunter(s) disabled!' : '⚡ EMP pulsed (nothing in range)');
 }
-function damagePlayer(dmg, fromPos){
+function hunterName(h){
+  if (h.ancient) return 'The Ancient One';
+  if (h.warden) return 'Stratum Warden';
+  if (h.trioRole) return 'A Guardian';
+  return { stalker: 'Stalker', skitter: 'Skitter', brute: 'Brute', sentry: 'Sentry', lurker: 'Lurker' }[h.typeId] || 'Hunter';
+}
+function damagePlayer(dmg, fromPos, src){
   if (!G || G.over || !player) return;
+  if (src) G.lastHit = src; // named on the death screen — no more unexplained deaths (Akmal 19 Nov)
   player.hull -= dmg * player.d.dmgMul;
   G.camShake = Math.min(1, G.camShake + 0.45);
   const fl = $('flash'); fl.style.opacity = 0.9; setTimeout(()=> fl.style.opacity = 0, 90);
@@ -2700,7 +2770,7 @@ function updateHunters(dt){
     }
     // contact damage
     const hitRange = h.type.hitR * Math.max(1, g.scale.x) * 0.8 + player.radius;
-    if (distP < hitRange && h.hitCd <= 0){ h.hitCd = 1.2; damagePlayer(h.dmgAbs || h.type.dmg, pos); }
+    if (distP < hitRange && h.hitCd <= 0){ h.hitCd = 1.2; damagePlayer(h.dmgAbs || h.type.dmg, pos, hunterName(h)); }
     else if (distP < hitRange + 5.5 && h.closeCd <= 0){
       h.closeCd = 6; G.closeCalls++;
       if (G.mode === 'survival'){ const b = Math.round(CONFIG.econ.closeCall * G.diff.mult); bankCoins(b); }
@@ -2732,14 +2802,14 @@ function updateHazardsAndPickups(dt){
     j.group.rotation.y += dt * 0.15;
     updateJellyfishVisual(j, G.time);
     if (!j.decor && pos.distanceTo(pp) < CONFIG.jelly.hitR + player.radius && j.hitCd <= 0){
-      j.hitCd = CONFIG.jelly.hitCd; damagePlayer(CONFIG.jelly.dmg, pos); toast('🪼 Jellyfish sting!');
+      j.hitCd = CONFIG.jelly.hitCd; damagePlayer(CONFIG.jelly.dmg, pos, 'Jellyfish'); toast('🪼 Jellyfish sting!');
     }
   }
   for (const m of G.mines){
     if (m.dead) continue;
     if (m.group.position.distanceTo(pp) < CONFIG.mine.triggerR){
       m.dead = true; explosionFx(m.group.position, 11); AudioSys.boom(); removeEntity(m.group);
-      damagePlayer(CONFIG.mine.dmg, m.group.position); toast('💥 Mine!');
+      damagePlayer(CONFIG.mine.dmg, m.group.position, 'Mine'); toast('💥 Mine!');
     }
   }
   for (const c of G.crystals){
@@ -2786,6 +2856,35 @@ function updateHazardsAndPickups(dt){
       player.hull = Math.min(player.d.maxHull, player.hull + CONFIG.econ.cacheHull); // caches are the in-dive hull source — without this, hull only ever goes down
       toast('📦 Supply cache: +' + CONFIG.econ.cacheHull + ' hull, +battery, +🪙 ' + v);
       AudioSys.coin();
+    }
+  }
+  if (G.pickups) for (const p of G.pickups){
+    if (p.taken) continue;
+    if (G.mode === 'survival' && p.floor !== undefined && p.floor !== G.floor) continue; // other floors' items are not here
+    p.group.rotation.y += dt * 0.8;
+    p.group.position.y = p.baseY + Math.sin(G.time * 1.3 + p.phase) * 0.9;
+    if (p.halo){ // same sonar-reveal halo behaviour as crystals
+      const rv = p.group.userData.reveal;
+      let f = 0.04;
+      if (rv) f = (G.time >= rv.at) ? rv.min + (1 - rv.min) * clamp(1 - (G.time - rv.at) / rv.dur, 0, 1) : rv.min;
+      const prox = clamp(1 - p.group.position.distanceTo(pp) / 16, 0, 1) * 0.35;
+      f = Math.max(f, prox);
+      const pulse = 1 + Math.sin(G.time * 1.7 + p.phase) * 0.12;
+      p.halo.material.opacity = p.haloBase * Math.pow(f, 1.35) * pulse;
+      const hs = p.haloScale * (0.55 + 0.45 * f) * pulse;
+      p.halo.scale.set(hs, hs, 1);
+    }
+    if (p.group.position.distanceTo(pp) < 4.6){
+      p.taken = true; removeEntity(p.group);
+      if (p.kind === 'cell'){
+        player.batt = Math.min(player.d.maxBatt + G.boon.battMax, player.batt + CONFIG.econ.cellBatt);
+        toast('🔋 Battery cell: +' + CONFIG.econ.cellBatt + ' battery');
+        AudioSys.tone(740, 0.1, 'sine', 0.08);
+      } else {
+        player.hull = Math.min(player.d.maxHull, player.hull + CONFIG.econ.patchHull);
+        toast('🛠 Hull patch: +' + CONFIG.econ.patchHull + ' hull');
+        AudioSys.coin();
+      }
     }
   }
   // decoy lifecycle
@@ -3110,6 +3209,7 @@ function updateSurvival(dt){
     G.collapseY -= speed * dt;
     if (pos.y > G.collapseY - 14){
       player.hull -= 10 * dt * player.d.dmgMul;
+      G.lastHit = 'The Collapse';
       G.camShake = Math.min(1, G.camShake + dt * 2);
       if ((G.collapseWarnT || 0) < G.time){ G.collapseWarnT = G.time + 3; toast('🟥 THE COLLAPSE IS CRUSHING YOU — DIVE!'); }
       if (player.hull <= 0){ player.hull = 0; endRun('dead'); return; }
@@ -3218,6 +3318,7 @@ function endRun(result){
     rows.push(['Survived', fmtTime(G.time) + (timeRec ? ' 🏅 record!' : '')]);
     rows.push(['Deepest', Math.floor(G.maxDepth) + ' m' + (depthRec ? ' 🏅 record!' : '')]);
     rows.push(['Floor reached', 'FLOOR ' + G.floor]);
+    if (result === 'dead' && G.lastHit) rows.push(['Killed by', G.lastHit]);
     rows.push(['Crystals', G.crystalsGot], ['Hunters destroyed', G.kills], ['Close calls', G.closeCalls]);
     rows.push(['Coins earned', '🪙 ' + G.coinsRun]);
     if (SAVE.trioBest) rows.push(['Guardians best', 'FLOOR ' + SAVE.trioBest]);
@@ -3302,6 +3403,11 @@ function updateHUD(){
   const hullBar = $('m-hull').firstElementChild;
   hullBar.style.width = clamp(p.hull / p.d.maxHull * 100, 0, 100) + '%';
   hullBar.style.background = p.hull / p.d.maxHull < 0.3 ? '#ff4d6d' : '#37e08b';
+  if (G && !G.over && p.hull > 0 && p.hull / p.d.maxHull < 0.3 && G.time > (G.hullWarnT || 0)){
+    G.hullWarnT = G.time + 6;
+    toast('⚠ HULL CRITICAL — find a supply cache or hull patch!', 2600);
+    AudioSys.tone(98, 0.3, 'sawtooth', 0.06, 65);
+  }
   const maxB = p.d.maxBatt + G.boon.battMax;
   $('batt-txt').textContent = Math.floor(p.batt) + ' / ' + maxB;
   $('m-batt').firstElementChild.style.width = clamp(p.batt / maxB * 100, 0, 100) + '%';
