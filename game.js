@@ -31,7 +31,7 @@ const CONFIG = {
 
   // ---- economy (DESIGN.md audited numbers) ----
   econ: { golden: 100, starBonus: { 2: 25, 3: 75 }, closeCall: 10, minuteBonus: 20,
-          stratumBonus: 10, cacheMin: 50, cacheMax: 150, ancientBounty: 150 },
+          stratumBonus: 10, cacheMin: 50, cacheMax: 150, cacheHull: 20, ancientBounty: 150 },
 
   // ---- submarines ----
   subs: {
@@ -2258,6 +2258,26 @@ function ensureBands(){
         spawnMine(gameScene, new THREE.Vector3(gc.group.position.x + Math.cos(a3) * d, gc.baseY + rand(-2, 2), gc.group.position.z + Math.sin(a3) * d));
       }
     }
+    // Exactly ONE supply cache per floor, guaranteed (mirrors the crystal
+    // guarantee above): sampled inside the slice, clear of the guard rocks,
+    // same by-construction fallback. Caches are the only in-dive hull source
+    // on normal floors — the old lone 16% roll meant ~1 cache per 6 floors
+    // and it restored no hull, so runs starved (Akmal playtest 19 Nov:
+    // "kehabisan resource, emang gaada"). The 16% roll stays below as a
+    // possible bonus second cache.
+    {
+      let cpos = null;
+      for (let t = 0; t < 20 && !cpos; t++){
+        const a = rand(0, Math.PI*2), r = rand(22, S.shaftRadius - 28);
+        const cand = new THREE.Vector3(Math.cos(a)*r, sliceY(), Math.sin(a)*r);
+        if (clearOfRocks(cand, 2.0)) cpos = cand;
+      }
+      if (!cpos){
+        const a3 = rand(0, Math.PI * 2);
+        cpos = new THREE.Vector3(anchor.x + Math.cos(a3) * 16, Math.min(Math.max(anchor.y, G.bandY + 4.5), G.bandY + 22), anchor.z + Math.sin(a3) * 16);
+      }
+      spawnCache(gameScene, cpos);
+    }
     if (Math.random() < 0.16) spawnCache(gameScene, new THREE.Vector3(rand(-95, 95), G.bandY + rand(4, 21), rand(-95, 95)));
     if (Math.random() < 0.55) spawnJelly(gameScene, new THREE.Vector3(rand(-115, 115), y + rand(-4, 4), rand(-115, 115)), 0x7fe0ff);
     if (Math.random() < 0.5) spawnJellyDrifter(gameScene, new THREE.Vector3(rand(-115, 115), y + rand(-5, 5), rand(-115, 115)), 0x7fe0ff);
@@ -2763,7 +2783,8 @@ function updateHazardsAndPickups(dt){
       c.taken = true; removeEntity(c.group);
       const v = Math.round(rand(CONFIG.econ.cacheMin, CONFIG.econ.cacheMax) * (G.diff ? G.diff.mult : 1));
       bankCoins(v); player.batt = Math.min(player.d.maxBatt + G.boon.battMax, player.batt + 30);
-      toast('📦 Supply cache: +🪙 ' + v + ', +battery');
+      player.hull = Math.min(player.d.maxHull, player.hull + CONFIG.econ.cacheHull); // caches are the in-dive hull source — without this, hull only ever goes down
+      toast('📦 Supply cache: +' + CONFIG.econ.cacheHull + ' hull, +battery, +🪙 ' + v);
       AudioSys.coin();
     }
   }
