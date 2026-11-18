@@ -911,6 +911,55 @@ function buildFishSchool(scene, center){
   return school;
 }
 
+// Ambient deep-sea passer-by (Survival decoration): one merged body mesh
+// (elongated body, tail + dorsal fins, angler lure stalk) + one merged glow
+// mesh (flank spots + lure tip). No collision, no damage, not a hunter — it
+// just crosses the shaft slowly so the mid-water feels inhabited.
+const DRIFTER_BODY_MAT = new THREE.MeshStandardMaterial({ color: 0x24333d, roughness: 0.6, metalness: 0.15, emissive: 0x0a1a22, emissiveIntensity: 0.7, flatShading: true });
+const DRIFTER_GLOW_MAT = new THREE.MeshBasicMaterial({ color: 0x8fe8ff });
+function buildDrifterFish(scene){
+  const parts = [];
+  const put = (geo, x, y, z, rx, ry, rz, sx = 1, sy = 1, sz = 1) => {
+    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, ry, rz));
+    m.scale(new THREE.Vector3(sx, sy, sz)); m.setPosition(x, y, z); geo.applyMatrix4(m); parts.push(geo);
+  };
+  put(new THREE.SphereGeometry(1, 10, 8), 0, 0, 0, 0, 0, 0, 2.7, 0.72, 0.55);              // elongated body (head +Z)
+  put(new THREE.ConeGeometry(0.62, 1.5, 4), -3.1, 0, 0, 0, 0, 0, 0.25, 1, 1.9);            // tail fin, vertical fan
+  put(new THREE.ConeGeometry(0.5, 1.1, 4), -0.2, 0.75, 0, 0.5, 0, 0, 0.22, 1, 1.1);        // dorsal fin
+  put(new THREE.CylinderGeometry(0.045, 0.045, 1.5, 5), 1.9, 0.85, 0, 0, 0, -0.8);          // lure stalk
+  const body = new THREE.Mesh(mergeGeometries(parts), DRIFTER_BODY_MAT);
+  const glows = [];
+  const gput = (x, y, z, r) => { const g = new THREE.SphereGeometry(r, 6, 5); g.translate(x, y, z); glows.push(g); };
+  gput(2.55, 1.35, 0, 0.17); // lure tip
+  for (let i = 0; i < 5; i++){ const gx = 1.2 - i * 0.75; gput(gx, -0.05, 0.52, 0.09); gput(gx, -0.05, -0.52, 0.09); } // flank spots, both sides
+  const glow = new THREE.Mesh(mergeGeometries(glows), DRIFTER_GLOW_MAT);
+  const group = new THREE.Group(); group.add(body); group.add(glow); scene.add(group);
+  const d = { group, vel: new THREE.Vector3(1, 0, 0), speed: rand(2.5, 4.5), phase: rand(0, 6.28), baseY: 0 };
+  placeDrifter(d, null, true);
+  return d;
+}
+function placeDrifter(d, playerPos, initial = false){
+  // (Re)spawn at a random depth near the player, on a slow crossing heading.
+  const cy = playerPos ? playerPos.y : 0;
+  const a = rand(0, Math.PI * 2), r = initial ? rand(30, 110) : rand(70, 130);
+  d.group.position.set(Math.cos(a) * r, cy + rand(-45, 15), Math.sin(a) * r);
+  d.baseY = d.group.position.y;
+  const heading = a + Math.PI / 2 + rand(-0.5, 0.5); // roughly tangential: crosses the view instead of charging the player
+  d.vel.set(Math.cos(heading), 0, Math.sin(heading)).multiplyScalar(d.speed);
+}
+function updateDrifters(dt, t){
+  const pos = player.group.position;
+  for (const d of G.drifters){
+    d.group.position.addScaledVector(d.vel, dt);
+    d.group.position.y = d.baseY + Math.sin(t * 0.5 + d.phase) * 1.6; // slow vertical drift
+    const look = d.group.position.clone().add(d.vel);
+    d.group.lookAt(look);
+    d.group.rotation.z += Math.sin(t * 1.7 + d.phase) * 0.1; // gentle roll — alive, not rigid
+    const dx = d.group.position.x - pos.x, dz = d.group.position.z - pos.z;
+    if (dx * dx + dz * dz > 175 * 175 || Math.abs(d.group.position.y - pos.y) > 95) placeDrifter(d, pos);
+  }
+}
+
 // ============================ UI / SCREENS ============================
 const $ = id => document.getElementById(id);
 let uiState = 'title';
@@ -919,6 +968,13 @@ const SCREEN_OF = { title:'scr-title', zones:'scr-zones', hangar:'scr-hangar', h
                     playing:null, paused:'scr-pause', boon:'scr-boon', end:'scr-end' };
 function setUI(state){
   uiState = state;
+  // Any screen other than active play hands the cursor back: forced modals
+  // (the boon draft, the end screen) and menus need a clickable cursor, so
+  // pointer lock is released here, centrally — the player must never have to
+  // Esc out of a draft just to reach the cards. uiState is already updated
+  // and pointerlockchange fires async, so the auto-pause handler sees the
+  // new state and never stacks a pause menu under the draft/end screen.
+  if (state !== 'playing' && document.pointerLockElement){ try { document.exitPointerLock(); } catch(e) {} }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
   const scr = SCREEN_OF[state]; if (scr) $(scr).classList.add('on');
   $('hud').classList.toggle('on', state === 'playing' || state === 'paused' || state === 'boon');
@@ -946,6 +1002,7 @@ function makeParticles(count, sx, sy, sz, color = 0x9fd8d2, size = 0.55){
   return pts;
 }
 let menuScene, menuSub, menuHunter, hangarScene, hangarPreview = null, hangarCamDist = 14;
+let hangarViewId = null; // sub shown on the hangar stage (may differ from SAVE.sub while browsing)
 function buildMenuScene(){
   menuScene = new THREE.Scene();
   menuScene.background = new THREE.Color(0x04161d);
@@ -990,13 +1047,26 @@ function hangarFrame(){
   }
   return { fx:0.5, fy:0.5, vHalf, hHalf };
 }
+// Locked-sub tease: an unowned sub previews as a pure silhouette — one shared
+// flat, unlit material ASSIGNED to the preview clone's meshes. Assignment only:
+// the clone shares material instances with the cached template, so nothing is
+// mutated and the cached model (and a later full-colour reveal) stay intact.
+const SILHOUETTE_MAT = new THREE.MeshBasicMaterial({ color: 0x02070a, fog: false });
+function silhouettePreview(root){
+  root.traverse(o => {
+    if (o.isMesh) o.material = SILHOUETTE_MAT;
+    else if (o.isSprite || o.isPoints) o.visible = false;
+  });
+}
 function refreshHangarPreview(){
   if (!hangarScene) return;
   if (hangarPreview){ hangarScene.remove(hangarPreview); }
-  const subId = SAVE.sub, def = CONFIG.subs[subId];
+  const subId = hangarViewId || SAVE.sub, def = CONFIG.subs[subId];
+  const owned = SAVE.subs.includes(subId);
   hangarPreview = makeAsset(def.asset);
   hangarPreview.scale.setScalar(def.scale * 1.15);
-  setAccent(hangarPreview, accentHex(subId));
+  if (owned) setAccent(hangarPreview, accentHex(subId));
+  else silhouettePreview(hangarPreview);
   hangarScene.add(hangarPreview);
   hangarScene.userData.rim.color.setHex(accentHex(subId));
   // Frame the whole sub: fit the preview camera distance to this model's bounding
@@ -1041,7 +1111,17 @@ function buildHangar(){
   for (const [id, s] of Object.entries(CONFIG.subs)){
     const owned = SAVE.subs.includes(id), selected = SAVE.sub === id;
     const card = document.createElement('div');
-    card.className = 'card' + (selected ? ' sel' : '');
+    card.className = 'card' + (selected ? ' sel' : '') + ((hangarViewId || SAVE.sub) === id && !selected ? ' viewing' : '');
+    // Clicking a card previews that sub on the stage — owned in full colour,
+    // unowned as a silhouette tease. Buttons and colour swatches keep their
+    // own actions (they stop the preview handler via the closest() guard).
+    card.onclick = (e)=>{
+      if (e.target.closest('button') || e.target.closest('.sw')) return;
+      hangarViewId = id;
+      wrap.querySelectorAll('.card').forEach(c => c.classList.remove('viewing'));
+      if (!selected) card.classList.add('viewing');
+      refreshHangarPreview();
+    };
     const hullFrac = SAVE.subHull[id];
     const bar = (v, max) => `<div class="bar"><i style="width:${clamp(v/max*100, 2, 100)}%"></i></div>`;
     card.innerHTML = `<h3>${s.name}</h3><div class="role">${s.role} · ${owned ? (selected ? 'SELECTED' : 'OWNED') : '🪙 ' + s.price}</div>
@@ -1056,7 +1136,7 @@ function buildHangar(){
     btn.disabled = selected || (!owned && SAVE.coins < s.price);
     btn.onclick = ()=>{
       if (!owned){ SAVE.coins -= s.price; SAVE.subs.push(id); toast(s.name + ' purchased'); }
-      SAVE.sub = id; persist(); buildHangar(); refreshHangarPreview();
+      SAVE.sub = id; hangarViewId = id; persist(); buildHangar(); refreshHangarPreview();
     };
     card.appendChild(btn);
     if (selected){
@@ -1069,7 +1149,7 @@ function buildHangar(){
         d.onclick = ()=>{
           if (!ownedC){ if (SAVE.coins < c.price){ toast('Not enough coins'); AudioSys.ui('back'); return; } SAVE.coins -= c.price; SAVE.colorsOwned.push(c.id); AudioSys.ui('buy'); }
           else AudioSys.ui('click');
-          SAVE.subColor[id] = c.id; persist(); buildHangar(); refreshHangarPreview();
+          SAVE.subColor[id] = c.id; hangarViewId = id; persist(); buildHangar(); refreshHangarPreview();
           document.documentElement.style.setProperty('--accent', hexCss(c.hex));
         };
         sw.appendChild(d);
@@ -1166,14 +1246,14 @@ function newG(mode){
     crystalsGot:0, crystalsTotal:0, coinsRun:0, empCd:0, noise:0, noisePulse:0,
     gateOpen:false, missionDone:false, surviveT:0, nestsDown:0, rescued:false,
     closeCalls:0, kills:0, torps:0, decoys:0, hintStep:-1, camShake:0,
-    hunters:[], crystals:[], jellies:[], mines:[], nests:[], fired:[], schools:[], waves:[], fx:[],
+    hunters:[], crystals:[], jellies:[], mines:[], nests:[], fired:[], schools:[], waves:[], fx:[], drifters:[],
     decoyActive:null, gate:null, stranded:null, boon:{ sonarMul:1, speedMul:1, crystalMul:1, empCdMul:1, battMax:0 },
     // survival descent gate + pulse cannon state
     floorCrystals:0, survGate:null, gateWarnT:0,
     cannonHeld:false, cannonHeat:0, cannonLock:false, cannonFireT:0, bolts:[],
     // survival director
     stratum:0, floor:0, maxDepth:0, spawnT:6, spawnInterval:CONFIG.survival.spawnStart,
-    nextBoonAt:CONFIG.survival.boonEvery, nextMinuteAt:60, nextAncientAt:CONFIG.survival.ancientEvery,
+    nextMinuteAt:60, nextAncientAt:CONFIG.survival.ancientEvery,
     bandY:0, collapseY:46, collapseMesh:null, pendingBoss:null, bossWarnAt:-1, bossSpawnAt:-1, wardenAlive:null, trio:null };
 }
 function removeEntity(root){
@@ -1297,6 +1377,19 @@ function spawnHunter(scene, typeId, pos, opts = {}){
   G.hunters.push(h);
   return h;
 }
+// Survival floors are stacked 25 m apart in one shaft, so a crystal of the
+// floor BELOW used to be visible (and ping-revealed) from the floor above —
+// players chased it thinking it counted toward their gate quota. Survival
+// crystals/caches therefore carry their floor (from their actual depth) and
+// are rendered ONLY while the player is on that floor. visible=false sits
+// above the reveal system: a ping on floor N can never reveal floor N±1's
+// collectibles. State (taken/value/quota) is untouched — visibility only.
+function survFloorOf(y){ return Math.floor(Math.max(0, -y) / CONFIG.survival.floorDepth); }
+function survCullCollectibles(){
+  if (!G || G.mode !== 'survival') return;
+  for (const c of G.crystals) if (!c.taken && c.floor !== undefined) c.group.visible = (c.floor === G.floor);
+  if (G.caches) for (const c of G.caches) if (!c.taken && c.floor !== undefined) c.group.visible = (c.floor === G.floor);
+}
 function spawnCrystal(scene, pos, value, golden = false){
   const group = makeAsset('crystal');
   if (golden) group.scale.setScalar(1.35);
@@ -1312,6 +1405,7 @@ function spawnCrystal(scene, pos, value, golden = false){
   group.add(halo);
   const c = { group, value, golden, taken: false, baseY: pos.y, phase: rand(0, Math.PI * 2),
               halo, haloBase: golden ? 0.55 : 0.42, haloScale: golden ? 4.6 : 3.2 };
+  if (G && G.mode === 'survival') c.floor = survFloorOf(pos.y);
   G.crystals.push(c);
   return c;
 }
@@ -1323,6 +1417,15 @@ function spawnJelly(scene, pos, tintHex){
   const j = { group, vel: new THREE.Vector3(rand(-1,1), rand(-0.25,0.25), rand(-1,1)).normalize().multiplyScalar(CONFIG.jelly.drift * rand(0.6, 1.3)),
               hitCd: 0, baseY: pos.y };
   G.jellies.push(j);
+  return j;
+}
+// Decorative jellyfish drifter (Survival ambience): same build and drift as a
+// hazard jelly, but flagged decor — the hazard loop skips its sting. It is
+// life in the water column, not a threat. Expedition jellies are untouched.
+function spawnJellyDrifter(scene, pos, tintHex){
+  const j = spawnJelly(scene, pos, tintHex);
+  j.decor = true;
+  j.vel.multiplyScalar(0.45);
   return j;
 }
 function spawnMine(scene, pos){
@@ -1362,6 +1465,7 @@ function spawnCache(scene, pos){
   group.position.copy(pos); scene.add(group);
   registerReveal(group, { min: 0.1 });
   const c = { group, taken: false, phase: rand(0, Math.PI*2) };
+  if (G && G.mode === 'survival') c.floor = survFloorOf(pos.y);
   if (!G.caches) G.caches = [];
   G.caches.push(c);
   return c;
@@ -1822,8 +1926,9 @@ function addDecor(scene, zone){
   registerReveal(g, { min: 0.3 });
   addMarineSnow(scene);
 }
+const SEABED_MAT = new THREE.MeshStandardMaterial({ color: 0x2b3a3c, roughness: 1, metalness: 0.02, flatShading: true, side: THREE.DoubleSide });
 // ---- survival set pieces (decoration only; merged primitives, shared materials) ----
-// One per floor, rotating vent → wreck → anemone. Placement keeps the descent
+// One per floor, rotating vent → shipwreck → anemone → shipwreck. Placement keeps the descent
 // gate's cylinder clear (gate sits at r ≤ 62 with an 8.6 ring): pillars and
 // outcrops start at r ≥ 74, wrecks stay in a floor's upper half (the gate
 // plane is at floorTop − 20), anemones hug the wall at r ≥ 128.
@@ -1858,6 +1963,39 @@ function makeWreckCluster(mat){
     const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(Math.PI / 2 + rand(-0.3, 0.3), 0, rand(0, 3)));
     m.setPosition(rand(-3, 3), 0.6, rand(-2.5, 2.5)); g.applyMatrix4(m); parts.push(g);
   }
+  const holder = new THREE.Group(); holder.userData.setPiece = 'wreck';
+  holder.add(new THREE.Mesh(mergeGeometries(parts), mat));
+  return holder;
+}
+// A real sunken ship, not debris: ~19-unit broken hull in two sections with a
+// gap at the break, exposed ribs arcing over the main section, a tilted mast
+// with crossbar and a fallen second mast, plus a funnel — one merged mesh.
+function makeShipwreck(mat){
+  const parts = [];
+  const put = (geo, x, y, z, rx, ry, rz) => {
+    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, ry, rz));
+    m.setPosition(x, y, z); geo.applyMatrix4(m); parts.push(geo);
+  };
+  // main hull section (stern), rolled slightly, deck plates on top
+  put(new THREE.BoxGeometry(10.5, 1.1, 3.8), 0, 0, 0, 0, 0, 0.07);            // keel plate
+  put(new THREE.BoxGeometry(10.5, 2.0, 0.35), 0, 1.2, 1.75, -0.22, 0, 0.07); // near hull side
+  put(new THREE.BoxGeometry(10.5, 2.0, 0.35), 0, 1.0, -1.75, 0.3, 0, 0.07);  // far hull side, partially collapsed
+  put(new THREE.BoxGeometry(9.6, 0.3, 3.3), 0, 2.15, 0, 0, 0, 0.1);          // deck
+  // bow section, broken off and yawed away across a 2.5-unit gap
+  put(new THREE.BoxGeometry(5.5, 1.0, 3.4), 9.2, -0.4, 1.6, 0.1, 0.65, -0.16);
+  put(new THREE.ConeGeometry(1.7, 3.4, 4), 12.6, -0.3, 2.9, 0, Math.PI / 4 + 0.65, Math.PI / 2); // tapered bow tip
+  // exposed ribs over the main section
+  for (let i = 0; i < 5; i++)
+    put(new THREE.TorusGeometry(2.05, 0.17, 6, 12, Math.PI), -4 + i * 2, 0.6, 0, 0, Math.PI / 2, 0.07);
+  // standing mast (tilted) with crossbar + fallen mast across the deck
+  put(new THREE.CylinderGeometry(0.16, 0.22, 8.5, 7), -1.5, 5.6, 0, 0.14, 0, 0.2);
+  put(new THREE.CylinderGeometry(0.09, 0.09, 3.6, 6), -2.1, 8.2, 0, 0, 0, Math.PI / 2 - 0.2);
+  put(new THREE.CylinderGeometry(0.14, 0.2, 7, 7), 2.6, 2.6, 0.6, Math.PI / 2 - 0.25, 0, 1.15);
+  // funnel / smokestack — the instant "ship" read
+  put(new THREE.CylinderGeometry(0.85, 1.0, 2.8, 10), -3.6, 3.2, 0, 0, 0, 0.12);
+  // scattered cargo barrels by the break
+  for (let i = 0; i < 3; i++)
+    put(new THREE.CylinderGeometry(0.8, 0.8, 2.1, 9), 6.4 + rand(-1, 1), 0.4, rand(-2.4, 0.5), Math.PI / 2 + rand(-0.3, 0.3), 0, rand(0, 3));
   const holder = new THREE.Group(); holder.userData.setPiece = 'wreck';
   holder.add(new THREE.Mesh(mergeGeometries(parts), mat));
   return holder;
@@ -1914,8 +2052,18 @@ function addSurvivalDressing(scene){
     // free-standing pillars inside the play volume (r ≥ 76: clear of the gate)
     for (let i = 0, n = deep ? 1 : 2; i < n; i++){
       const a = rand(0, Math.PI * 2), r = rand(76, 118), h = rand(11, 24) * big;
-      batch.add(Math.cos(a) * r, top - rand(10, 34), Math.sin(a) * r, rand(3, 5) * big, h, rand(3, 5) * big);
+      const x = Math.cos(a) * r, z = Math.sin(a) * r, yc = top - rand(10, 34);
+      batch.add(x, yc, z, rand(3, 5) * big, h, rand(3, 5) * big);
+      outcrops.push({ x, y: yc + h * 0.5, z }); // pillar tops carry coral/kelp too — raised glowing outcrops at eye level
     }
+    // floating islets + a small cluster per band: mid-water silhouettes that
+    // layer through the fog INSIDE the view cone (the column read bare)
+    for (let i = 0; i < 2; i++){
+      const a = rand(0, Math.PI * 2), r = rand(30, 105), s = rand(3.5, 8.5) * big;
+      batch.add(Math.cos(a) * r, top - rand(4, 46), Math.sin(a) * r, s, s * rand(0.6, 1), s);
+    }
+    { const a = rand(0, Math.PI * 2), r = rand(40, 100), cx = Math.cos(a) * r, cz = Math.sin(a) * r, cy = top - rand(6, 44);
+      for (let i = 0; i < 3; i++){ const s = rand(1.8, 4) * big; batch.add(cx + rand(-6, 6), cy + rand(-4, 4), cz + rand(-6, 6), s, s * 0.8, s); } }
     // mid-field outcrops (r ≥ 74: clear of the gate) — anchors for the flora
     for (let i = 0; i < 2; i++){
       const a = rand(0, Math.PI * 2), r = rand(74, 122), s = rand(4.5, 8) * big, y = top - rand(8, 42);
@@ -1926,10 +2074,13 @@ function addSurvivalDressing(scene){
   }
   const grp = new THREE.Group();
   grp.add(batch.build());
-  // ---- set pieces: one per floor (25 m), rotating vent / wreck / anemone ----
+  // ---- set pieces: one per floor (25 m), rotating vent / WRECK / anemone / WRECK ----
+  // Shipwrecks now anchor half the floors (Akmal: wrecks should read as real
+  // sunken ships). They sit at r 78–118 so the ~19-unit hull keeps the gate
+  // cylinder (r ≤ 62 + ring) structurally clear, in the floor's upper half.
   const wreckMat = std(0x2c3840, { roughness: 0.75, metalness: 0.5, flatShading: true });
   for (let f = 0; f < BANDS * 2; f++){
-    const floorTop = -f * 25, type = f % 3;
+    const floorTop = -f * 25, type = f % 4;
     if (type === 0){ // bubble vent — rooted on an outcrop of this floor when one is near
       const anchor = outcrops.find(o => o.y < floorTop + 2 && o.y > floorTop - 27);
       if (anchor) grp.add(makeBubbleVent(anchor.x, anchor.y, anchor.z));
@@ -1938,10 +2089,10 @@ function addSurvivalDressing(scene){
         batch2.add(x, floorTop - 23.5, z, 4, 2, 4);
         grp.add(makeBubbleVent(x, floorTop - 22.5, z));
       }
-    } else if (type === 1){ // wreck debris — upper half of the floor (gate plane: floorTop − 20)
-      const a = rand(0, Math.PI * 2), r = rand(48, 115);
-      const w = makeWreckCluster(wreckMat);
-      w.position.set(Math.cos(a) * r, floorTop - rand(3, 8), Math.sin(a) * r);
+    } else if (type === 1 || type === 3){ // shipwreck — lower half of the floor, resting toward the seabed
+      const a = rand(0, Math.PI * 2), r = rand(78, 118);
+      const w = makeShipwreck(wreckMat);
+      w.position.set(Math.cos(a) * r, floorTop - rand(13, 19), Math.sin(a) * r);
       w.rotation.y = rand(0, Math.PI * 2);
       grp.add(w);
     } else { // glowing anemone patch on the wall
@@ -1951,6 +2102,28 @@ function addSurvivalDressing(scene){
     }
   }
   grp.add(batch2.build());
+  // ---- per-floor seabed: a terrain ring at every floor's base plane ----
+  // The ring's centre (r < 74) stays open — that is the descent opening the
+  // gates (r ≤ 62 + ring) sit in; spawnSurvivalGate adds a local disc with
+  // the exact hole at the gate itself. Dune displacement is a smooth
+  // deterministic function of position, so the merged rings have no seams.
+  {
+    const ringGeos = [];
+    for (let f = 0; f < BANDS * 2; f++){
+      const g = new THREE.RingGeometry(74, 152, 48, 3);
+      g.rotateX(-Math.PI / 2);
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++){
+        const x = p.getX(i), z = p.getZ(i), r = Math.hypot(x, z);
+        if (r > 78 && r < 148) p.setY(i, Math.sin(x * 0.08) * Math.cos(z * 0.06) * 1.4);
+      }
+      g.computeVertexNormals();
+      g.translate(0, -f * 25 - 25, 0);
+      ringGeos.push(g);
+    }
+    const seabed = new THREE.Mesh(mergeGeometries(ringGeos), SEABED_MAT);
+    grp.add(seabed);
+  }
   addSurvivalFlora(grp, outcrops);
   scene.add(grp);
   registerReveal(grp, { min: 0.24 });
@@ -2001,31 +2174,95 @@ function startExpedition(zone){
 
 // ============================ START: SURVIVAL ============================
 function crystalValueNow(){ return CONFIG.survival.crystalBase + G.stratum * CONFIG.survival.crystalPerStratum; }
+const BAND_KELP_MAT = new THREE.MeshStandardMaterial({ color: 0x27573f, roughness: 0.6, metalness: 0.05,
+  emissive: 0x14301f, emissiveIntensity: 0.35, side: THREE.DoubleSide, transparent: true, opacity: 0.92 });
 function ensureBands(){
   const S = CONFIG.survival, py = player.group.position.y;
   while (G.bandY > py - 290){
     G.bandY -= S.bandEvery;
     const y = G.bandY + rand(-7, 7);
-    for (let i=0;i<3;i++){
-      const a = rand(0, Math.PI*2), r = rand(22, S.shaftRadius - 28);
-      spawnCrystal(gameScene, new THREE.Vector3(Math.cos(a)*r, y + rand(-6, 6), Math.sin(a)*r), crystalValueNow());
+    // This band serves ONE floor: the 25 m slice directly above its base
+    // plane (bandY = −25·m serves floor m−1, slice y ∈ [bandY, bandY+25]).
+    // Crystals/caches sample INSIDE that slice with margins — the old
+    // band-centred sampling straddled the boundary between two floors, so a
+    // floor could spawn with fewer crystals than its gate quota (or with a
+    // crystal embedded in the guard rocks) and be uncompletable.
+    const servedFloor = survFloorOf(G.bandY) - 1;
+    const sliceY = () => G.bandY + rand(3.5, 15); // depth ∈ [25·servedFloor + 10, +21.5]: inside the floor, biased toward the seabed half (item 8 banding still wins — never outside the slice)
+    const bandRocks = []; // {x,y,z,rad} world-space, for crystal clearance sampling
+    const clusterRocks = []; // the guard cluster's own rocks — guarded crystals sample against one of these
+    // Guard feature (world-stable, culled with the band): a small rock cluster
+    // with a kelp tuft. Two of the band's three crystals tuck against it —
+    // fetching them means working terrain, not a straight open-water swim.
+    // The third crystal stays in the open for variety/readability.
+    const ga = rand(0, Math.PI * 2), gr = rand(38, 112);
+    const anchor = new THREE.Vector3(Math.cos(ga) * gr, G.bandY + rand(4.5, 14), Math.sin(ga) * gr);
+    const cg = new THREE.Group(); cg.position.copy(anchor);
+    for (let i = 0, n = randi(2, 3); i < n; i++){
+      const rad = rand(3, 7);
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(rad, 0), std(0x1c2a30, { roughness: 0.95 }));
+      rock.position.set(rand(-6, 6), rand(-3, 3), rand(-6, 6));
+      cg.add(rock);
+      const wr = { x: anchor.x + rock.position.x, y: anchor.y + rock.position.y, z: anchor.z + rock.position.z, rad };
+      bandRocks.push(wr); clusterRocks.push(wr);
     }
-    if (Math.random() < 0.16) spawnCache(gameScene, new THREE.Vector3(rand(-95, 95), y, rand(-95, 95)));
-    if (Math.random() < 0.55) spawnJelly(gameScene, new THREE.Vector3(rand(-115, 115), y + rand(-4, 4), rand(-115, 115)), 0x7fe0ff);
-    if (Math.random() < 0.3){
-      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(rand(4, 10), 0), std(0x1c2a30, { roughness: 0.95 }));
+    for (let i = 0; i < 3; i++) addKelp(cg, BAND_KELP_MAT, rand(-5, 5), -3, rand(-5, 5), 0x7fe0ff);
+    gameScene.add(registerReveal(cg, { min: 0.13 }));
+    if (!G.rocks) G.rocks = []; G.rocks.push(cg);
+    if (Math.random() < 0.3){ // loose rock rolled BEFORE the crystals so they can clearance-check against it too
+      const rad = rand(4, 10);
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(rad, 0), std(0x1c2a30, { roughness: 0.95 }));
       const a = rand(0, Math.PI*2), r = rand(60, S.shaftRadius - 10);
       rock.position.set(Math.cos(a)*r, y, Math.sin(a)*r);
       gameScene.add(registerReveal(rock, { min: 0.13 }));
-      if (!G.rocks) G.rocks = []; G.rocks.push(rock);
+      G.rocks.push(rock);
+      bandRocks.push({ x: rock.position.x, y: rock.position.y, z: rock.position.z, rad });
     }
+    const clearOfRocks = (p, margin) => { for (const rk of bandRocks){ const dx = p.x - rk.x, dy = p.y - rk.y, dz = p.z - rk.z; if (dx*dx + dy*dy + dz*dz < (rk.rad + margin) * (rk.rad + margin)) return false; } return true; };
+    const guarded = [];
+    for (let i=0;i<3;i++){
+      let pos = null;
+      for (let t = 0; t < 20 && !pos; t++){
+        let cand;
+        if (i < 2){
+          // Sample against a CHOSEN cluster rock: centre + direction × (radius
+          // + 1.2–2.8) puts the crystal just off that rock's face by
+          // construction (tucked, never embedded), then clearance-check the rest.
+          const rk = pick(clusterRocks), a2 = rand(0, Math.PI * 2), d = rk.rad + rand(1.2, 2.8);
+          cand = new THREE.Vector3(rk.x + Math.cos(a2) * d, Math.min(Math.max(rk.y + rand(-1.5, 2), G.bandY + 3.5), G.bandY + 22.5), rk.z + Math.sin(a2) * d);
+          if (clearOfRocks(cand, 1.0)) pos = cand;
+        } else {
+          const a = rand(0, Math.PI*2), r = rand(22, S.shaftRadius - 28);
+          cand = new THREE.Vector3(Math.cos(a)*r, sliceY(), Math.sin(a)*r);
+          if (clearOfRocks(cand, 2.0)) pos = cand;
+        }
+      }
+      if (!pos){ // by-construction clear: 16 from the anchor beats the cluster's max reach (offset 6 + radius 7 + clearance 2 = 15), y clamped into the slice
+        const a3 = rand(0, Math.PI * 2);
+        pos = new THREE.Vector3(anchor.x + Math.cos(a3) * 16, Math.min(Math.max(anchor.y, G.bandY + 4.5), G.bandY + 22), anchor.z + Math.sin(a3) * 16);
+      }
+      const c = spawnCrystal(gameScene, pos, crystalValueNow());
+      if (i < 2) guarded.push(c);
+    }
+    // Mines at depth: from Stratum II (floor 10) on, 1–2 mines threaten the
+    // approach to this floor's guarded crystals — offset 6–10 units, outside
+    // the 4.6 pickup radius but inside the approach path. None above floor 10.
+    if (servedFloor >= 10){
+      for (let i = 0, nM = Math.min(guarded.length, randi(1, 2)); i < nM; i++){
+        const gc = guarded[i], a3 = rand(0, Math.PI * 2), d = rand(6, 10);
+        spawnMine(gameScene, new THREE.Vector3(gc.group.position.x + Math.cos(a3) * d, gc.baseY + rand(-2, 2), gc.group.position.z + Math.sin(a3) * d));
+      }
+    }
+    if (Math.random() < 0.16) spawnCache(gameScene, new THREE.Vector3(rand(-95, 95), G.bandY + rand(4, 21), rand(-95, 95)));
+    if (Math.random() < 0.55) spawnJelly(gameScene, new THREE.Vector3(rand(-115, 115), y + rand(-4, 4), rand(-115, 115)), 0x7fe0ff);
+    if (Math.random() < 0.5) spawnJellyDrifter(gameScene, new THREE.Vector3(rand(-115, 115), y + rand(-5, 5), rand(-115, 115)), 0x7fe0ff);
   }
-  for (const listName of ['crystals', 'jellies', 'caches', 'rocks']){
+  for (const listName of ['crystals', 'jellies', 'caches', 'rocks', 'mines']){
     const list = G[listName]; if (!list) continue;
     for (let i = list.length - 1; i >= 0; i--){
       const item = list[i];
-      const grp = item.group || item; // survival rocks are stored as bare meshes, the rest as { group }
-      if (grp.position.y > py + 110 && !item.taken){ removeEntity(grp); list.splice(i, 1); }
+      const grp = item.group || item; // survival rocks are stored as bare meshes/groups, the rest as { group }
+      if (grp.position.y > py + 110 && !item.taken && !item.dead){ removeEntity(grp); list.splice(i, 1); }
     }
   }
 }
@@ -2049,8 +2286,10 @@ function startSurvival(diffId){
   cm.position.y = G.collapseY;
   gameScene.add(cm); G.collapseMesh = cm;
   addSurvivalDressing(gameScene);
-  const pts = makeParticles(600, 380, 380, 380); gameScene.add(pts); G.particles = pts;
-  for (let i=0;i<2;i++) G.schools.push(buildFishSchool(gameScene, new THREE.Vector3(rand(-80, 80), rand(-40, -10), rand(-80, 80))));
+  const pts = makeParticles(900, 380, 380, 380); gameScene.add(pts); G.particles = pts;
+  const motes = makeParticles(130, 300, 300, 300, 0x9fe8ff, 1.4); gameScene.add(motes); G.motes = motes; // sparse glowing motes: mid-range water texture
+  for (let i=0;i<4;i++) G.schools.push(buildFishSchool(gameScene, new THREE.Vector3(rand(-80, 80), rand(-40, -10), rand(-80, 80))));
+  for (let i=0;i<5;i++) G.drifters.push(buildDrifterFish(gameScene)); // ambient deep-sea passers-by (decoration only)
   ensureBands();
   spawnSurvivalGate(0);
   document.documentElement.style.setProperty('--accent', hexCss(accentHex(SAVE.sub)));
@@ -2467,7 +2706,7 @@ function updateHazardsAndPickups(dt){
     if (horiz > lim){ j.vel.x -= pos.x * 0.03; j.vel.z -= pos.z * 0.03; }
     j.group.rotation.y += dt * 0.15;
     updateJellyfishVisual(j, G.time);
-    if (pos.distanceTo(pp) < CONFIG.jelly.hitR + player.radius && j.hitCd <= 0){
+    if (!j.decor && pos.distanceTo(pp) < CONFIG.jelly.hitR + player.radius && j.hitCd <= 0){
       j.hitCd = CONFIG.jelly.hitCd; damagePlayer(CONFIG.jelly.dmg, pos); toast('🪼 Jellyfish sting!');
     }
   }
@@ -2480,6 +2719,7 @@ function updateHazardsAndPickups(dt){
   }
   for (const c of G.crystals){
     if (c.taken) continue;
+    if (G.mode === 'survival' && c.floor !== undefined && c.floor !== G.floor) continue; // other floors' crystals are not here (see survCullCollectibles)
     c.group.rotation.y += dt * 0.8;
     c.group.position.y = c.baseY + Math.sin(G.time * 1.3 + c.phase) * 0.9;
     if (c.halo){ // halo brightness follows the sonar reveal (+ a proximity shimmer up close)
@@ -2512,6 +2752,7 @@ function updateHazardsAndPickups(dt){
   }
   if (G.caches) for (const c of G.caches){
     if (c.taken) continue;
+    if (G.mode === 'survival' && c.floor !== undefined && c.floor !== G.floor) continue; // other floors' caches are not here
     c.group.rotation.y += dt * 0.6;
     if (c.group.position.distanceTo(pp) < 5){
       c.taken = true; removeEntity(c.group);
@@ -2624,11 +2865,23 @@ function spawnSurvivalGate(f){
   if (G.survGate){
     removeEntity(G.survGate.gate.group);
     if (G.survGate.column) gameScene.remove(G.survGate.column);
+    if (G.survGate.disc) removeEntity(G.survGate.disc);
     G.survGate = null;
   }
   const S = CONFIG.survival;
   const a = rand(0, Math.PI * 2), r = rand(26, 62);
   const pos = new THREE.Vector3(Math.cos(a) * r, -(f + 1) * S.floorDepth + 5, Math.sin(a) * r);
+  // Seabed disc at this floor's base plane with the dive-through hole exactly
+  // at the gate (the gate is NOT at the shaft centre — r 26–62 — so the hole
+  // follows it). Visual only: the barrier clamp already stops the player at
+  // this plane everywhere except through the opened gate.
+  const discShape = new THREE.Shape(); discShape.absarc(0, 0, 20, 0, Math.PI * 2, false);
+  const discHole = new THREE.Path(); discHole.absarc(0, 0, 10, 0, Math.PI * 2, true);
+  discShape.holes.push(discHole);
+  const discGeo = new THREE.ShapeGeometry(discShape, 28); discGeo.rotateX(-Math.PI / 2);
+  const disc = new THREE.Mesh(discGeo, SEABED_MAT);
+  disc.position.set(pos.x, -(f + 1) * S.floorDepth + 0.15, pos.z);
+  gameScene.add(registerReveal(disc, { min: 0.24 }));
   const gate = spawnGate(gameScene, pos);
   gate.group.rotation.x = Math.PI / 2; // ring lies flat — you dive through it
   const core = glowBall(0.9, 0xff4d6d); core.material.fog = false; gate.group.add(core);
@@ -2639,7 +2892,7 @@ function spawnSurvivalGate(f){
   column.visible = false;
   gameScene.add(column);
   gate.ringMat.color.setHex(0xff4d6d);
-  G.survGate = { gate, floor: f, open: false, bossDown: false, core, column, quota: survFloorQuota(f) };
+  G.survGate = { gate, floor: f, open: false, bossDown: false, core, column, quota: survFloorQuota(f), disc };
 }
 function updateSurvivalGate(){
   if (!G.survGate || G.survGate.floor !== G.floor) spawnSurvivalGate(G.floor);
@@ -2774,7 +3027,7 @@ function onStratumCross(newStratum, floor){
     G.pendingBoss = { kind: 'warden', stratum: newStratum, warn: '⚠ Something massive stirs below — a STRATUM WARDEN approaches…' };
     G.bossWarnAt = G.time + 0.5; G.bossSpawnAt = G.time + CONFIG.warden.warnBefore; G.bossWarned = false;
   }
-  openBoonDraft();
+  // (No draft on stratum cross any more — the Warden/Guardians kill grants it.)
 }
 function updateSurvival(dt){
   const S = CONFIG.survival, pos = player.group.position;
@@ -2786,6 +3039,10 @@ function updateSurvival(dt){
     G.floorCrystals = 0; // the descent-gate quota counts crystals collected ON the new floor
     const newStratum = Math.floor(newFloor / S.floorsPerStratum);
     if (newStratum > G.stratum) onStratumCross(newStratum, newFloor);
+    // Descent boon draft on odd multiples of 5 (floors 5, 15, 25, …) — the
+    // old 60 s timer draft and the stratum-cross draft are gone; boss kills
+    // (Warden / Three Guardians) still grant their draft as the boss reward.
+    if (newFloor % 10 === 5) openBoonDraft();
     updateObjective();
   }
   updateSurvivalGate();
@@ -2797,7 +3054,6 @@ function updateSurvival(dt){
     spawnSurvivalHunter();
   }
   if (G.time >= G.nextMinuteAt){ G.nextMinuteAt += 60; bankCoins(Math.round(CONFIG.econ.minuteBonus * G.diff.mult)); }
-  if (G.time >= G.nextBoonAt){ G.nextBoonAt += S.boonEvery; openBoonDraft(); }
   if (G.time >= G.nextAncientAt){ G.nextAncientAt += S.ancientEvery; spawnAncient(); }
   if (G.pendingBoss){
     if (!G.bossWarned && G.time >= G.bossWarnAt){ G.bossWarned = true; toast(G.pendingBoss.warn, 3800); AudioSys.tone(196, 0.7, 'sawtooth', 0.1, 98); }
@@ -2819,6 +3075,8 @@ function updateSurvival(dt){
   }
   G.collapseMesh.position.y = G.collapseY;
   if (G.particles) G.particles.position.y = pos.y;
+  if (G.motes) G.motes.position.y = pos.y;
+  updateDrifters(dt, G.time);
   for (const s of G.schools){
     if (Math.abs(s.center.y - pos.y) > 130){
       s.center.set(rand(-80, 80), pos.y - rand(30, 80), rand(-80, 80));
@@ -2827,6 +3085,7 @@ function updateSurvival(dt){
     }
   }
   ensureBands();
+  survCullCollectibles();
 }
 
 // ============================ BOONS ============================
@@ -2840,6 +3099,14 @@ const BOON_APPLY = {
   greed(){ G.boon.crystalMul *= 1.5; },
   emp(){ G.boon.empCdMul *= 0.5; },
 };
+// Re-engage pointer lock from a genuine click (e.g. picking a boon card):
+// the pick click is itself a user gesture, so the lock can be re-requested
+// immediately and steering control returns without an extra canvas click.
+// If the browser refuses (rare cooldown), the rejection is swallowed and
+// the normal click-canvas-to-lock flow remains as the fallback.
+function tryRelock(){
+  try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch(e) {}
+}
 function openBoonDraft(){
   if (uiState === 'boon' || !G || G.over || G.mode !== 'survival') return;
   const pool = [...CONFIG.boons], chosen = [];
@@ -2849,7 +3116,7 @@ function openBoonDraft(){
     const card = document.createElement('div');
     card.className = 'card boon';
     card.innerHTML = `<div class="ic">${b.icon}</div><h3>${b.name}</h3><p class="stat" style="float:none">${b.desc}</p>`;
-    card.onclick = ()=>{ AudioSys.init(); BOON_APPLY[b.id](); toast('⚗ ' + b.name); setUI('playing'); };
+    card.onclick = ()=>{ AudioSys.init(); BOON_APPLY[b.id](); toast('⚗ ' + b.name); setUI('playing'); tryRelock(); };
     wrap.appendChild(card);
   }
   setUI('boon');
@@ -3103,6 +3370,21 @@ function animate(){
 
 // ============================ WIRING & BOOT ============================
 function wire(){
+  // ---- first-gesture audio unlock (browser autoplay policy) ----
+  // No AudioContext exists at page load, and init() used to be wired only
+  // into SOME title controls (Expedition / Survival / Hangar buttons): a
+  // first click on the water never reached the canvas mousedown handler
+  // (the .screen overlay covers it), and the HOW TO PLAY button and the
+  // difficulty pills carry no init() at all — so the lobby theme stayed
+  // silent until a wired button happened to be pressed. Bind init() to the
+  // FIRST pointer/key gesture anywhere on the document (capture phase,
+  // once): whatever the player touches first creates the context and, on
+  // the title/lobby screens, Music.start() brings the lobby theme up with
+  // it. If the context is still born suspended, init()'s own
+  // armGestureResume keeps retrying on later gestures until it runs.
+  const unlockAudio = ()=> AudioSys.init();
+  document.addEventListener('pointerdown', unlockAudio, { capture: true, once: true });
+  document.addEventListener('keydown', unlockAudio, { capture: true, once: true });
   $('btn-expedition').onclick = ()=>{ AudioSys.init(); buildZoneCards(); setUI('zones'); };
   $('btn-survival').onclick = ()=>{
     AudioSys.init();
@@ -3115,7 +3397,7 @@ function wire(){
     d.classList.add('sel'); survDiff = d.dataset.diff;
   });
   $('btn-start-survival').onclick = ()=>{ AudioSys.init(); startSurvival(survDiff); };
-  $('btn-hangar').onclick = ()=>{ AudioSys.init(); setUI('hangar'); buildHangar(); refreshHangarPreview(); };
+  $('btn-hangar').onclick = ()=>{ AudioSys.init(); hangarViewId = SAVE.sub; setUI('hangar'); buildHangar(); refreshHangarPreview(); };
   $('btn-howto').onclick = ()=> setUI('howto');
   $('btn-howto-back').onclick = ()=> setUI('title');
   $('btn-zones-back').onclick = ()=> setUI('title');
@@ -3124,7 +3406,7 @@ function wire(){
   $('btn-restart').onclick = ()=> restartDive();
   $('btn-quit').onclick = ()=>{ if (G) endRun('abandon'); };
   $('btn-end-retry').onclick = ()=> restartDive();
-  $('btn-end-hangar').onclick = ()=>{ AudioSys.init(); setUI('hangar'); buildHangar(); refreshHangarPreview(); };
+  $('btn-end-hangar').onclick = ()=>{ AudioSys.init(); hangarViewId = SAVE.sub; setUI('hangar'); buildHangar(); refreshHangarPreview(); };
   $('btn-end-next').onclick = ()=>{ if (G && G.mode === 'expedition'){ buildZoneCards(); setUI('zones'); } else setUI('title'); };
   const sb = $('btn-sound');
   sb.textContent = Music.muted() ? '🔇' : '🔊';

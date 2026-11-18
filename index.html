@@ -37,6 +37,8 @@
   .cards{grid-template-columns:repeat(auto-fit,minmax(230px,1fr));}
   .card{background:rgba(10,34,42,.85);border:1px solid rgba(46,230,200,.22);border-radius:11px;padding:14px;}
   .card.sel{border-color:var(--accent);box-shadow:0 0 14px rgba(46,230,200,.4);}
+  .card.viewing{outline:1px dashed rgba(46,230,200,.55);outline-offset:-1px;}
+  #sub-cards .card{cursor:pointer;}
   .card.locked{opacity:.55;}
   .card h3{font-size:17px;letter-spacing:1px;margin-bottom:4px;}
   .card .role{color:var(--ink-dim);font-size:12px;text-transform:uppercase;letter-spacing:1px;}
@@ -173,7 +175,7 @@
       <div class="grid cards" id="sub-cards"></div>
     </div>
     <div class="hangar-stage" id="hangar-stage">
-      <div class="hangar-hint">Drag on the water to rotate the sub · scroll to zoom</div>
+      <div class="hangar-hint">Click a sub to preview it · drag on the water to rotate · scroll to zoom</div>
     </div>
     <div class="hangar-col panel" id="hangar-shop">
       <h2 style="font-size:16px">UPGRADES</h2>
