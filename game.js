@@ -174,7 +174,7 @@ const SAVE = (() => {
   const def = { coins:0, subs:['minnow'], sub:'minnow',
     upg:{ sonar:0, battery:0, hull:0 }, stars:{}, golden:{},
     colorsOwned:['teal'], subColor:{}, stock:{ decoy:2, torp:4 },
-    subHull:{}, bestDepth:0, bestTime:0, trioBest:0 };
+    subHull:{}, bestDepth:0, bestTime:0, trioBest:0, music:1 };
   try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && typeof s === 'object') return Object.assign(def, s); } catch(e) {}
   return def;
 })();
@@ -203,13 +203,14 @@ function accentHex(subId){ const cid = SAVE.subColor[subId] || 'teal'; const c =
 // ============================ AUDIO (procedural Web Audio) ============================
 const AudioSys = {
   ctx:null, growlOsc:null, growlGain:null,
-  init(){ if (this.ctx) return; try {
+  init(){ if (this.ctx){ Music.resume(); return; } try {
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     this.growlOsc = this.ctx.createOscillator(); this.growlOsc.type = 'sawtooth'; this.growlOsc.frequency.value = 52;
     const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 220;
     this.growlGain = this.ctx.createGain(); this.growlGain.gain.value = 0;
     this.growlOsc.connect(f); f.connect(this.growlGain); this.growlGain.connect(this.ctx.destination);
     this.growlOsc.start();
+    Music.start();
   } catch(e) {} },
   tone(freq, dur, type='sine', gain=0.12, slideTo=null, delay=0){ if (!this.ctx) return; try {
     const t0 = this.ctx.currentTime + delay, o = this.ctx.createOscillator(), g = this.ctx.createGain();
@@ -234,6 +235,163 @@ const AudioSys = {
   hit(){ this.tone(110, 0.22, 'sawtooth', 0.16, 55); this.noiseBurst(0.18, 700, 0.12); },
   gate(){ this.tone(523, 0.16, 'sine', 0.1); this.tone(784, 0.22, 'sine', 0.1, null, 0.13); },
   setGrowl(level){ if (this.growlGain && this.ctx) { try { this.growlGain.gain.setTargetAtTime(clamp(level,0,0.14), this.ctx.currentTime, 0.15); } catch(e) {} } },
+};
+
+// ============================ MUSIC (generative ambient score) ============================
+// Dark underwater theme over Am–F–Am–E: deep drone + slow bell motif (the "theme song")
+// through a feedback-delay abyss echo. In dives the motif thins out; a tension layer
+// (heartbeat + minor-2nd pad) tracks hunting hunters / high NOISE and fades with the hunt.
+// Music ducks (keeps playing quietly) under pause / boon / end screens.
+const MUSIC_STEP = 1.05; // seconds per step; 16 steps = one 4-bar loop
+const Music = {
+  started:false, bus:null, delay:null, tensionBus:null, padGain:null,
+  step:0, nextStep:0, loop:0, tension:0, nextBeat:0,
+  muted(){ return SAVE.music === 0; },
+  mf(m){ return 440 * Math.pow(2, (m - 69) / 12); },
+  start(){
+    if (this.started || !AudioSys.ctx) return;
+    const ctx = AudioSys.ctx; this.started = true;
+    try {
+      this.bus = ctx.createGain(); this.bus.gain.value = 0; this.bus.connect(ctx.destination);
+      // feedback-delay echo send
+      this.delay = ctx.createDelay(1.5); this.delay.delayTime.value = 0.42;
+      const fb = ctx.createGain(); fb.gain.value = 0.34;
+      const wet = ctx.createGain(); wet.gain.value = 0.35;
+      this.delay.connect(fb); fb.connect(this.delay); this.delay.connect(wet); wet.connect(this.bus);
+      // ---- drone: A1 + E2 + A2 through a slowly breathing lowpass ----
+      const df = ctx.createBiquadFilter(); df.type = 'lowpass'; df.frequency.value = 210;
+      const dg = ctx.createGain(); dg.gain.value = 0.055;
+      df.connect(dg); dg.connect(this.bus);
+      for (const [f, ty, g] of [[55,'sine',1],[82.41,'sine',0.6],[110,'triangle',0.25]]){
+        const o = ctx.createOscillator(); o.type = ty; o.frequency.value = f;
+        const og = ctx.createGain(); og.gain.value = g; o.connect(og); og.connect(df); o.start();
+      }
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.05;
+      const lg = ctx.createGain(); lg.gain.value = 70; lfo.connect(lg); lg.connect(df.frequency); lfo.start();
+      // ---- tension pad: A2 + Bb2 saws (minor-2nd clash), gain driven by tensionTick ----
+      this.tensionBus = ctx.createGain(); this.tensionBus.gain.value = 1; this.tensionBus.connect(ctx.destination);
+      const tf = ctx.createBiquadFilter(); tf.type = 'lowpass'; tf.frequency.value = 360;
+      this.padGain = ctx.createGain(); this.padGain.gain.value = 0;
+      tf.connect(this.padGain); this.padGain.connect(this.tensionBus);
+      for (const f of [110, 116.54]){
+        const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+        const og = ctx.createGain(); og.gain.value = 0.5; o.connect(og); og.connect(tf); o.start();
+      }
+      this.nextStep = ctx.currentTime + 0.15;
+      setInterval(()=> this.tick(), 200);
+      setInterval(()=> this.tensionTick(), 120);
+      this.applyMode(true);
+    } catch(e) {}
+  },
+  resume(){ if (AudioSys.ctx && AudioSys.ctx.state === 'suspended'){ try { AudioSys.ctx.resume(); } catch(e) {} } },
+  mode(){
+    if (uiState === 'playing') return 'game';
+    if (uiState === 'paused' || uiState === 'boon' || uiState === 'end') return 'duck';
+    return 'lobby';
+  },
+  applyMode(snap){
+    if (!this.bus) return;
+    const m = this.mode();
+    const lvl = this.muted() ? 0 : (m === 'lobby' ? 0.20 : m === 'game' ? 0.12 : 0.045);
+    try { this.bus.gain.setTargetAtTime(lvl, AudioSys.ctx.currentTime, snap ? 0.05 : 1.2); } catch(e) {}
+  },
+  toggleMute(){
+    SAVE.music = this.muted() ? 1 : 0; persist(); this.applyMode();
+    const b = $('btn-sound'); if (b) b.textContent = this.muted() ? '🔇' : '🔊';
+    toast(this.muted() ? 'Music off (M)' : 'Music on (M)', 1200);
+  },
+  bell(m, t, vol, decay){
+    const ctx = AudioSys.ctx, f = this.mf(m);
+    for (const [mult, g, dk] of [[1, 1, 1], [2.76, 0.32, 0.45], [5.4, 0.1, 0.25]]){
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f * mult;
+      const og = ctx.createGain();
+      og.gain.setValueAtTime(vol * g, t);
+      og.gain.exponentialRampToValueAtTime(0.0001, t + decay * dk);
+      o.connect(og); og.connect(this.bus); og.connect(this.delay);
+      o.start(t); o.stop(t + decay + 0.05);
+    }
+  },
+  pad(midis, t, dur){
+    const ctx = AudioSys.ctx;
+    for (const m of midis){
+      const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = this.mf(m);
+      const og = ctx.createGain();
+      og.gain.setValueAtTime(0, t);
+      og.gain.linearRampToValueAtTime(0.030, t + 1.4);
+      og.gain.setValueAtTime(0.030, Math.max(t + 1.4, t + dur - 1.2));
+      og.gain.linearRampToValueAtTime(0, t + dur);
+      o.connect(og); og.connect(this.bus); og.connect(this.delay);
+      o.start(t); o.stop(t + dur + 0.05);
+    }
+  },
+  bass(m, t){
+    const ctx = AudioSys.ctx;
+    const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = this.mf(m);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.14, t);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
+    o.connect(og); og.connect(this.bus);
+    o.start(t); o.stop(t + 2.7);
+  },
+  scheduleStep(s, t){
+    const CH = [ { r:33, pad:[57,60,64] },   // Am
+                 { r:29, pad:[53,57,60] },   // F
+                 { r:33, pad:[57,60,64] },   // Am
+                 { r:28, pad:[52,56,59] } ]; // E
+    if (s % 4 === 0){ const c = CH[Math.floor(s / 4)]; this.bass(c.r, t); this.pad(c.pad, t, MUSIC_STEP * 4); }
+    const MEL = { 0:69, 2:72, 4:76, 6:74, 8:72, 10:69, 12:67, 14:64 }; // A4 C5 E5 D5 C5 A4 G4 E4
+    const m = MEL[s];
+    if (m !== undefined){
+      const game = this.mode() === 'game';
+      if (!game || this.loop % 2 === 0) this.bell(m, t, game ? 0.075 : 0.105, 3.6); // sparser in dives
+    }
+  },
+  tick(){
+    if (!this.started) return;
+    this.resume(); this.applyMode();
+    const ctx = AudioSys.ctx;
+    while (this.nextStep < ctx.currentTime + 0.6){
+      this.scheduleStep(this.step, this.nextStep);
+      this.nextStep += MUSIC_STEP;
+      this.step = (this.step + 1) % 16;
+      if (this.step === 0) this.loop++;
+    }
+  },
+  tensionTick(){
+    if (!this.started) return;
+    const ctx = AudioSys.ctx;
+    let target = 0;
+    if (uiState === 'playing' && G && player){
+      let nd = Infinity;
+      for (const h of G.hunters){
+        if (h.dead || h.disabled > 0) continue;
+        const hunting = h.state === 'hunting' || (h.typeId === 'lurker' && h.lurkState === 'dash');
+        if (hunting){ const d = h.group.position.distanceTo(player.group.position); if (d < nd) nd = d; }
+      }
+      if (nd !== Infinity) target = clamp(1.15 - nd / 85, 0.3, 1);
+      else if (G.noise > 62) target = 0.22 * clamp((G.noise - 62) / 38, 0, 1);
+    }
+    this.tension += (target - this.tension) * (target > this.tension ? 0.3 : 0.06); // fast in, slow out
+    if (target === 0 && this.tension < 0.01) this.tension = 0;
+    const duckScale = (uiState === 'paused' || uiState === 'boon' || uiState === 'end') ? 0.35 : 1;
+    try { this.padGain.gain.setTargetAtTime(this.muted() ? 0 : this.tension * 0.05 * duckScale, ctx.currentTime, 0.25); } catch(e) {}
+    if (!this.muted() && this.tension > 0.05 && uiState === 'playing' && ctx.currentTime >= this.nextBeat){
+      this.thump(ctx.currentTime, 0.34 * this.tension);
+      this.thump(ctx.currentTime + 0.17, 0.22 * this.tension);
+      this.nextBeat = ctx.currentTime + lerp(1.15, 0.42, this.tension);
+    }
+  },
+  thump(t, vol){
+    const ctx = AudioSys.ctx;
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(66, t);
+    o.frequency.exponentialRampToValueAtTime(36, t + 0.13);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(vol, t);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    o.connect(og); og.connect(this.tensionBus);
+    o.start(t); o.stop(t + 0.2);
+  },
 };
 
 // ============================ THREE SETUP ============================
@@ -662,6 +820,7 @@ let pointerLocked = false;
 window.addEventListener('keydown', e => {
   keys[e.code] = true; AudioSys.init();
   if (e.repeat) return;
+  if (e.code === 'KeyM'){ Music.toggleMute(); return; }
   if (uiState === 'playing'){
     if (e.code === 'Space'){ e.preventDefault(); doPing(); }
     else if (e.code === 'KeyQ') dropDecoy();
@@ -2055,9 +2214,18 @@ function updateHUD(){
 // ============================ MAIN LOOP ============================
 const clock = new THREE.Clock();
 let menuT = 0, objT = 0;
+let huntVigCur = 0;
+const huntVigEl = document.getElementById('huntvig');
 function animate(){
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
+  // hunt vignette: subtle red edge pulse while a hunter is hunting you (driven by Music.tension)
+  if (huntVigEl){
+    const vigTgt = (uiState === 'playing' && Music.tension > 0.04)
+      ? (0.08 + 0.17 * Music.tension) * (0.78 + 0.22 * Math.sin(performance.now() * 0.007)) : 0;
+    huntVigCur += (vigTgt - huntVigCur) * Math.min(1, dt * 5);
+    huntVigEl.style.opacity = huntVigCur.toFixed(3);
+  }
   if (uiState === 'playing' && G && !G.over){
     G.time += dt;
     if (G.empCd > 0) G.empCd -= dt;
@@ -2127,6 +2295,9 @@ function wire(){
   $('btn-end-retry').onclick = ()=> restartDive();
   $('btn-end-hangar').onclick = ()=>{ AudioSys.init(); setUI('hangar'); buildHangar(); refreshHangarPreview(); };
   $('btn-end-next').onclick = ()=>{ if (G && G.mode === 'expedition'){ buildZoneCards(); setUI('zones'); } else setUI('title'); };
+  const sb = $('btn-sound');
+  sb.textContent = Music.muted() ? '🔇' : '🔊';
+  sb.onclick = ()=>{ AudioSys.init(); Music.toggleMute(); };
 }
 (async function boot(){
   if (SAVE.trioBest === undefined) SAVE.trioBest = 0;
