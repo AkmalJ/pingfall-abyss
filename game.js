@@ -18,7 +18,7 @@ const CONFIG = {
   // ---- sonar / noise / battery ----
   sonar: { baseRadius: 95, waveSpeed: 150, revealDur: 3.4, pingCost: 10,
            pingNoiseRadiusMul: 1.15, noiseDecay: 16, engineHearBase: 30 },
-  batteryRegen: 2.4,
+  batteryRegen: 0.8, // was 2.4 — at 2.4/s a 10-cost ping refilled in ~4 s and battery never visibly dropped (Akmal playtest 19 Nov); at 0.8/s a ping takes 12.5 s to earn back, so cells/caches matter
   emp: { cooldown: 20 },
   decoy: { life: 12, radius: 95, pulse: 0.6 },
 
