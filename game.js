@@ -1970,8 +1970,8 @@ function updatePlayer(dt){
   let thrust = 0, strafe = 0;
   if (keys['KeyW']) thrust += 1;
   if (keys['KeyS']) thrust -= 0.7;
-  if (keys['KeyD']) strafe += 0.75;
-  if (keys['KeyA']) strafe -= 0.75;
+  if (keys['KeyD']) strafe -= 0.75;
+  if (keys['KeyA']) strafe += 0.75;
   const maxSp = p.d.def.speed * G.boon.speedMul, accel = 46;
   p.vel.addScaledVector(fwd, thrust * accel * dt);
   p.vel.addScaledVector(right, strafe * accel * dt);
