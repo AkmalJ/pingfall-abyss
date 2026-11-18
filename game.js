@@ -2341,6 +2341,61 @@ function ensureBands(){
     gameScene.add(registerReveal(tg, { min: 0.13 }));
     G.rocks.push(tg);
     bandRocks.push({ x: tAnchor.x, y: tAnchor.y, z: tAnchor.z, rad: 11 });
+    // Theme SCATTER (Akmal 19 Nov, from his playtest video): the centrepiece
+    // alone reads as one patch in a 300 m shaft, so the theme's ambient
+    // elements are ALSO spread across the whole floor slice at low density —
+    // the floor feels themed wherever you swim. One group at the band's base
+    // plane (children slice-relative), culled with the band via G.rocks.
+    const sg = new THREE.Group(); sg.position.set(0, G.bandY, 0);
+    const scat = () => { const a = rand(0, Math.PI * 2), r = rand(18, 135); return { x: Math.cos(a) * r, z: Math.sin(a) * r }; };
+    if (theme.id === 'wreck'){
+      for (let i = 0; i < 8; i++){
+        const p = scat(), dr = new THREE.Mesh(new THREE.DodecahedronGeometry(rand(1.2, 3), 0), BAND_ROCK_MAT);
+        dr.position.set(p.x, rand(2, 30), p.z); dr.rotation.set(rand(0, 3), rand(0, 3), rand(0, 3));
+        sg.add(dr);
+      }
+      for (let i = 0; i < 3; i++){
+        const p = scat(), barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 2.1, 9), BAND_WRECK_MAT);
+        barrel.position.set(p.x, rand(2, 28), p.z); barrel.rotation.set(Math.PI / 2 + rand(-0.3, 0.3), 0, rand(0, 3));
+        sg.add(barrel);
+      }
+    } else if (theme.id === 'kelp'){
+      for (let i = 0; i < 12; i++){
+        const p = scat();
+        addKelp(sg, BAND_KELP_MAT, p.x, rand(0, 8), p.z, 0x7fe0ff);
+      }
+      for (let i = 0; i < 2; i++){
+        const p = scat(), an = makeAnemonePatch();
+        an.position.set(p.x, rand(1, 10), p.z); sg.add(an);
+      }
+    } else if (theme.id === 'ruins'){
+      for (let i = 0; i < 5; i++){
+        const p = scat(), drum = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 1.6, 8), BAND_STONE_MAT);
+        drum.rotation.z = Math.PI / 2; drum.rotation.y = rand(0, 3);
+        drum.position.set(p.x, rand(2, 26), p.z);
+        sg.add(drum);
+      }
+      for (let i = 0; i < 3; i++){
+        const p = scat(), h = rand(2, 5), stub = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.4, h, 8), BAND_STONE_MAT);
+        stub.position.set(p.x, rand(2, 24), p.z); stub.rotation.z = rand(-0.15, 0.15);
+        sg.add(stub);
+      }
+    } else { // vent
+      for (let i = 0; i < 3; i++){
+        const p = scat();
+        sg.add(makeBubbleVent(p.x, rand(1, 8), p.z));
+      }
+      for (let i = 0; i < 5; i++){
+        const p = scat(), vr = new THREE.Mesh(new THREE.DodecahedronGeometry(rand(1.5, 3.2), 0), BAND_LAVA_MAT);
+        vr.position.set(p.x, rand(2, 28), p.z);
+        sg.add(vr);
+        const ember = glowBall(0.3, 0xff6a2a);
+        ember.position.set(p.x, vr.position.y + 1, p.z);
+        sg.add(ember);
+      }
+    }
+    gameScene.add(registerReveal(sg, { min: 0.13 }));
+    G.rocks.push(sg);
     const clearOfRocks = (p, margin) => { for (const rk of bandRocks){ const dx = p.x - rk.x, dy = p.y - rk.y, dz = p.z - rk.z; if (dx*dx + dy*dy + dz*dz < (rk.rad + margin) * (rk.rad + margin)) return false; } return true; };
     const guarded = [];
     for (let i=0;i<3;i++){
