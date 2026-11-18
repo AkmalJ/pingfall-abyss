@@ -1610,7 +1610,15 @@ function updateEnvironmentFx(dt){
     }
     a.needsUpdate = true;
   }
-  if (envFx.shaft) envFx.shaft.position.y = Math.round(pp.y / 50) * 50;
+  // The shaft dressing column is authored in LOCAL coords matching the
+  // first stratum's depths (set pieces sit at their own floors) and is
+  // locked per stratum: position.y steps ONLY at stratum boundaries
+  // (400 m), where the gate transition masks the recycle. The old 50 m
+  // snap teleported every pillar, rock and coral 50 m each time the
+  // player crossed a 25 m midpoint — the whole view vanished at once,
+  // "like a different world" (Akmal playtest 19 Nov; this collective
+  // teleport, not the reveal fade, was the main cause all along).
+  if (envFx.shaft) envFx.shaft.position.y = Math.min(0, Math.ceil(pp.y / CONFIG.survival.stratumDepth) * CONFIG.survival.stratumDepth);
   // The seabed rings live in their OWN group locked to the player's current
   // floor (not the 50 m shaft snap): the current floor's base plane always
   // has its ring, and no ring ever floats above it as a fake layer.
