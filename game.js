@@ -2107,9 +2107,14 @@ function addSurvivalDressing(scene){
   // gates (r ≤ 62 + ring) sit in; spawnSurvivalGate adds a local disc with
   // the exact hole at the gate itself. Dune displacement is a smooth
   // deterministic function of position, so the merged rings have no seams.
+  // The loop starts at f = -2 (local Y +25 / 0) on purpose: this group snaps
+  // in 50 m steps (updateEnvFx), so on odd floors past their midpoint the
+  // player's own base plane sits at local 0 — without the two extra rings
+  // the terrain vanished from that plane and the gate disc floated 25 m
+  // above the visible seabed (Akmal playtest 19 Nov, floor 1 vs floor 0).
   {
     const ringGeos = [];
-    for (let f = 0; f < BANDS * 2; f++){
+    for (let f = -2; f < BANDS * 2; f++){
       const g = new THREE.RingGeometry(74, 152, 48, 3);
       g.rotateX(-Math.PI / 2);
       const p = g.attributes.position;
