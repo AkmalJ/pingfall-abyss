@@ -109,11 +109,11 @@
     <div style="margin-top:3px" id="emp-txt">EMP READY [E]</div>
     <div style="margin-top:3px;color:var(--ink-dim)" id="time-txt">00:00</div>
   </div>
-  <div class="hudbox" id="hud-bc"><span id="ctl-txt">W thrust · Mouse steer · SPACE ping · Click/F torpedo · Q decoy · E EMP · Esc pause</span></div>
+  <div class="hudbox" id="hud-bc"><span id="ctl-txt">W thrust · Mouse steer · R/C rise/sink · SPACE ping · Click/F torpedo · Q decoy · E EMP · Esc pause</span></div>
   <div id="hint"></div>
 </div>
 <div id="toast"></div>
-<button id="btn-sound" title="Music on/off (M)">🔊</button>
+<button id="btn-sound" title="Music + ambience on/off (M)">🔊</button>
 
 <!-- TITLE -->
 <div class="screen on" id="scr-title">
@@ -165,13 +165,14 @@
     <table class="keys">
       <tr><td><span class="kbd">W</span>/<span class="kbd">S</span></td><td>Thrust forward / back (mouse steers, click water to lock pointer)</td></tr>
       <tr><td><span class="kbd">A</span>/<span class="kbd">D</span></td><td>Strafe</td></tr>
+      <tr><td><span class="kbd">R</span>/<span class="kbd">C</span></td><td>Rise / sink (direct vertical thrust)</td></tr>
       <tr><td><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span></td><td>Turn / pitch (when pointer is not locked)</td></tr>
       <tr><td><span class="kbd">SPACE</span></td><td>Sonar ping — reveals the world, costs battery, makes noise</td></tr>
       <tr><td><span class="kbd">Click</span> / <span class="kbd">F</span></td><td>Fire torpedo</td></tr>
       <tr><td><span class="kbd">Q</span></td><td>Drop sonar decoy — hunters chase its noise instead of you</td></tr>
       <tr><td><span class="kbd">E</span></td><td>EMP pulse — disables nearby hunters (cooldown)</td></tr>
       <tr><td><span class="kbd">Esc</span> / <span class="kbd">P</span></td><td>Pause</td></tr>
-      <tr><td><span class="kbd">M</span></td><td>Music on / off</td></tr>
+      <tr><td><span class="kbd">M</span></td><td>Music + ambience on / off</td></tr>
     </table>
     <p style="color:var(--ink-dim);line-height:1.5">Collect 💎 crystals for coins. Finish the zone mission to open the gate, then swim through it.
     Hunter core lights: <span style="color:#59d7ff">blue = dormant</span>, <span style="color:#ffb84d">amber = curious</span>, <span style="color:#ff4d6d">red = hunting you</span>.

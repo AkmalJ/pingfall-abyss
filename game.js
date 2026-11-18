@@ -5,6 +5,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const CONFIG = {
   // ---- assets: models/<name>.glb, placeholder fallback when missing ----
@@ -203,7 +204,7 @@ function accentHex(subId){ const cid = SAVE.subColor[subId] || 'teal'; const c =
 // ============================ AUDIO (procedural Web Audio) ============================
 const AudioSys = {
   ctx:null, growlOsc:null, growlGain:null,
-  init(){ if (this.ctx){ Music.resume(); return; } try {
+  init(){ if (this.ctx){ Music.resume(); if (this.ctx.state !== 'running') this.armGestureResume(); return; } try {
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     this.growlOsc = this.ctx.createOscillator(); this.growlOsc.type = 'sawtooth'; this.growlOsc.frequency.value = 52;
     const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 220;
@@ -211,7 +212,26 @@ const AudioSys = {
     this.growlOsc.connect(f); f.connect(this.growlGain); this.growlGain.connect(this.ctx.destination);
     this.growlOsc.start();
     Music.start();
+    if (this.ctx.state !== 'running') this.armGestureResume();
   } catch(e) {} },
+  // If the context was born suspended (autoplay policy / webview), interval-driven
+  // resume() calls are rejected without user activation — so retry the resume inside
+  // EVERY genuine gesture (capture phase, any element) until the context runs. This is
+  // what removes the old "mute, then unmute, before any sound" dance.
+  armGestureResume(){
+    if (this._grm || !this.ctx) return; this._grm = true;
+    const kick = () => {
+      if (!this.ctx) return;
+      if (this.ctx.state === 'running'){
+        document.removeEventListener('pointerdown', kick, true);
+        document.removeEventListener('keydown', kick, true);
+        this._grm = false; return;
+      }
+      Music.resume(); Music.applyMode(true);
+    };
+    document.addEventListener('pointerdown', kick, true);
+    document.addEventListener('keydown', kick, true);
+  },
   tone(freq, dur, type='sine', gain=0.12, slideTo=null, delay=0){ if (!this.ctx) return; try {
     const t0 = this.ctx.currentTime + delay, o = this.ctx.createOscillator(), g = this.ctx.createGain();
     o.type = type; o.frequency.setValueAtTime(freq, t0);
@@ -245,7 +265,10 @@ const AudioSys = {
 const MUSIC_STEP = 1.05; // seconds per step; 16 steps = one 4-bar loop
 const Music = {
   started:false, bus:null, delay:null, tensionBus:null, padGain:null,
+  padFilter:null, motifBus:null, cueBus:null, droneFilter:null,
   step:0, nextStep:0, loop:0, tension:0, nextBeat:0,
+  gameMix:0, _wasSuspended:false,
+  engGain:null, engFilter:null, engHum:null, engSaw:null, propGain:null, washGain:null, noiseBuf:null, _creakT:90,
   muted(){ return SAVE.music === 0; },
   mf(m){ return 440 * Math.pow(2, (m - 69) / 12); },
   start(){
@@ -258,8 +281,15 @@ const Music = {
       const fb = ctx.createGain(); fb.gain.value = 0.34;
       const wet = ctx.createGain(); wet.gain.value = 0.35;
       this.delay.connect(fb); fb.connect(this.delay); this.delay.connect(wet); wet.connect(this.bus);
+      // mode-shaping nodes: bells route via motifBus (thinned in dives), pads via
+      // padFilter (darkened in dives), one-shots (transition cues) via cueBus.
+      this.motifBus = ctx.createGain(); this.motifBus.gain.value = 1; this.motifBus.connect(this.bus);
+      this.cueBus = ctx.createGain(); this.cueBus.gain.value = 0.8; this.cueBus.connect(ctx.destination);
+      this.padFilter = ctx.createBiquadFilter(); this.padFilter.type = 'lowpass'; this.padFilter.frequency.value = 1150;
+      this.padFilter.connect(this.bus); this.padFilter.connect(this.delay);
       // ---- drone: A1 + E2 + A2 through a slowly breathing lowpass ----
       const df = ctx.createBiquadFilter(); df.type = 'lowpass'; df.frequency.value = 210;
+      this.droneFilter = df;
       const dg = ctx.createGain(); dg.gain.value = 0.055;
       df.connect(dg); dg.connect(this.bus);
       for (const [f, ty, g] of [[55,'sine',1],[82.41,'sine',0.6],[110,'triangle',0.25]]){
@@ -277,9 +307,30 @@ const Music = {
         const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
         const og = ctx.createGain(); og.gain.value = 0.5; o.connect(og); og.connect(tf); o.start();
       }
+      // ---- submarine bed: engine hum + prop whir + water wash (driven by engineTick) ----
+      const nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+      const nd = nb.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+      this.noiseBuf = nb;
+      this.engGain = ctx.createGain(); this.engGain.gain.value = 0; this.engGain.connect(ctx.destination);
+      this.engFilter = ctx.createBiquadFilter(); this.engFilter.type = 'lowpass'; this.engFilter.frequency.value = 190;
+      this.engFilter.connect(this.engGain);
+      this.engHum = ctx.createOscillator(); this.engHum.type = 'sine'; this.engHum.frequency.value = 47;
+      const hg = ctx.createGain(); hg.gain.value = 0.55; this.engHum.connect(hg); hg.connect(this.engFilter); this.engHum.start();
+      this.engSaw = ctx.createOscillator(); this.engSaw.type = 'sawtooth'; this.engSaw.frequency.value = 94;
+      const sg = ctx.createGain(); sg.gain.value = 0.16; this.engSaw.connect(sg); sg.connect(this.engFilter); this.engSaw.start();
+      const propSrc = ctx.createBufferSource(); propSrc.buffer = nb; propSrc.loop = true;
+      const propBp = ctx.createBiquadFilter(); propBp.type = 'bandpass'; propBp.frequency.value = 480; propBp.Q.value = 0.8;
+      this.propGain = ctx.createGain(); this.propGain.gain.value = 0;
+      propSrc.connect(propBp); propBp.connect(this.propGain); this.propGain.connect(ctx.destination); propSrc.start();
+      const washSrc = ctx.createBufferSource(); washSrc.buffer = nb; washSrc.loop = true; washSrc.playbackRate.value = 0.7;
+      const washLp = ctx.createBiquadFilter(); washLp.type = 'lowpass'; washLp.frequency.value = 420;
+      this.washGain = ctx.createGain(); this.washGain.gain.value = 0;
+      washSrc.connect(washLp); washLp.connect(this.washGain); this.washGain.connect(ctx.destination); washSrc.start();
+      this._creakT = rand(70, 150);
       this.nextStep = ctx.currentTime + 0.15;
       setInterval(()=> this.tick(), 200);
       setInterval(()=> this.tensionTick(), 120);
+      setInterval(()=> this.engineTick(), 110);
       this.applyMode(true);
     } catch(e) {}
   },
@@ -291,9 +342,17 @@ const Music = {
   },
   applyMode(snap){
     if (!this.bus) return;
-    const m = this.mode();
+    const m = this.mode(), now = AudioSys.ctx.currentTime;
     const lvl = this.muted() ? 0 : (m === 'lobby' ? 0.20 : m === 'game' ? 0.12 : 0.045);
-    try { this.bus.gain.setTargetAtTime(lvl, AudioSys.ctx.currentTime, snap ? 0.05 : 1.2); } catch(e) {}
+    try {
+      this.bus.gain.setTargetAtTime(lvl, now, snap ? 0.05 : 1.2);
+      // mode character: lobby = open pads + full bell motif; dives = dark pads
+      // (380 Hz), motif thinned to 0.35, drone sunk; duck (pause/end) in between.
+      this.padFilter.frequency.setTargetAtTime(m === 'game' ? 380 : m === 'duck' ? 520 : 1150, now, snap ? 0.1 : 0.9);
+      this.motifBus.gain.setTargetAtTime(m === 'game' ? 0.35 : 1, now, snap ? 0.1 : 0.9);
+      this.droneFilter.frequency.setTargetAtTime(m === 'game' ? 140 : m === 'duck' ? 170 : 210, now, snap ? 0.1 : 0.9);
+      this.cueBus.gain.setTargetAtTime(this.muted() ? 0 : 0.8, now, snap ? 0.05 : 0.4);
+    } catch(e) {}
   },
   toggleMute(){
     SAVE.music = this.muted() ? 1 : 0; persist(); this.applyMode();
@@ -307,7 +366,7 @@ const Music = {
       const og = ctx.createGain();
       og.gain.setValueAtTime(vol * g, t);
       og.gain.exponentialRampToValueAtTime(0.0001, t + decay * dk);
-      o.connect(og); og.connect(this.bus); og.connect(this.delay);
+      o.connect(og); og.connect(this.motifBus); og.connect(this.delay);
       o.start(t); o.stop(t + decay + 0.05);
     }
   },
@@ -320,7 +379,7 @@ const Music = {
       og.gain.linearRampToValueAtTime(0.030, t + 1.4);
       og.gain.setValueAtTime(0.030, Math.max(t + 1.4, t + dur - 1.2));
       og.gain.linearRampToValueAtTime(0, t + dur);
-      o.connect(og); og.connect(this.bus); og.connect(this.delay);
+      o.connect(og); og.connect(this.padFilter);
       o.start(t); o.stop(t + dur + 0.05);
     }
   },
@@ -339,23 +398,126 @@ const Music = {
                  { r:33, pad:[57,60,64] },   // Am
                  { r:28, pad:[52,56,59] } ]; // E
     if (s % 4 === 0){ const c = CH[Math.floor(s / 4)]; this.bass(c.r, t); this.pad(c.pad, t, MUSIC_STEP * 4); }
+    // dive undertow: a slow sonar bloom that only exists underwater
+    if (this.gameMix > 0.35 && s % 8 === 4) this.undertow(t);
     const MEL = { 0:69, 2:72, 4:76, 6:74, 8:72, 10:69, 12:67, 14:64 }; // A4 C5 E5 D5 C5 A4 G4 E4
     const m = MEL[s];
     if (m !== undefined){
-      const game = this.mode() === 'game';
-      if (!game || this.loop % 2 === 0) this.bell(m, t, game ? 0.075 : 0.105, 3.6); // sparser in dives
+      if (this.gameMix < 0.5) this.bell(m, t, 0.105, 3.6);        // lobby: the full motif
+      else if (s === 0 || s === 8) this.bell(m, t, 0.055, 3.0);  // dive: two soft notes per loop
     }
+  },
+  undertow(t){
+    const ctx = AudioSys.ctx, gm = this.gameMix;
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(49, t);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06 * gm, t + 0.7);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2.4);
+    o.connect(g); g.connect(this.bus); o.start(t); o.stop(t + 2.5);
+    const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.setValueAtTime(392, t);
+    const g2 = ctx.createGain();
+    g2.gain.setValueAtTime(0.0001, t); g2.gain.exponentialRampToValueAtTime(0.011 * gm, t + 0.25);
+    g2.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+    o2.connect(g2); g2.connect(this.bus); o2.start(t); o2.stop(t + 1.7);
   },
   tick(){
     if (!this.started) return;
-    this.resume(); this.applyMode();
+    this.resume();
     const ctx = AudioSys.ctx;
+    // Never schedule against a frozen (suspended) clock — that was the silent-start
+    // bug: notes queued at t=0 while suspended. On recovery, re-anchor + snap gains.
+    if (ctx.state !== 'running'){ this._wasSuspended = true; return; }
+    if (this._wasSuspended){ this._wasSuspended = false; this.nextStep = ctx.currentTime + 0.12; this.applyMode(true); }
+    this.applyMode();
+    const gmT = this.mode() === 'game' ? 1 : this.mode() === 'duck' ? 0.35 : 0;
+    this.gameMix += (gmT - this.gameMix) * 0.09; // ~2 s perceptual crossfade of mode character
     while (this.nextStep < ctx.currentTime + 0.6){
       this.scheduleStep(this.step, this.nextStep);
       this.nextStep += MUSIC_STEP;
       this.step = (this.step + 1) % 16;
       if (this.step === 0) this.loop++;
     }
+  },
+  diveCue(){ // soft descending sonar bloom when a run starts
+    if (!this.started) return;
+    const ctx = AudioSys.ctx, t = ctx.currentTime + 0.02;
+    try {
+      const o = ctx.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(620, t); o.frequency.exponentialRampToValueAtTime(84, t + 1.7);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.11, t + 0.12);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.85);
+      o.connect(g); g.connect(this.cueBus); o.start(t); o.stop(t + 1.9);
+      const src = ctx.createBufferSource(); src.buffer = this.noiseBuf;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.7;
+      bp.frequency.setValueAtTime(900, t); bp.frequency.exponentialRampToValueAtTime(150, t + 1.3);
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.0001, t); ng.gain.exponentialRampToValueAtTime(0.05, t + 0.18);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t + 1.35);
+      src.connect(bp); bp.connect(ng); ng.connect(this.cueBus); src.start(t, 0.4); src.stop(t + 1.4);
+    } catch(e) {}
+  },
+  riseCue(){ // gentle ascending bloom when surfacing to the end screen
+    if (!this.started) return;
+    const ctx = AudioSys.ctx, t = ctx.currentTime + 0.02;
+    try {
+      const o = ctx.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(170, t); o.frequency.exponentialRampToValueAtTime(530, t + 1.25);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.075, t + 0.35);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+      o.connect(g); g.connect(this.cueBus); o.start(t); o.stop(t + 1.55);
+      this.bell(69, t + 0.55, 0.05, 2.6);
+    } catch(e) {}
+  },
+  engineTick(){ // submarine bed: follows thrust/speed; the M mute silences it too
+    if (!this.started || !this.engGain) return;
+    const ctx = AudioSys.ctx; if (!ctx) return;
+    const m = this.muted() ? 0 : 1;
+    let gT = 0, fT = 190, humF = 47, sawF = 94, propT = 0, washT = 0;
+    if (uiState === 'playing' && player && G && !G.over){
+      const maxSp = Math.max(1, player.d.def.speed * (G.boon ? G.boon.speedMul : 1));
+      const sf = clamp(player.vel.length() / maxSp, 0, 1);
+      const th = clamp(player.thrust || 0, 0, 1.7) / 1.7;
+      const drive = clamp(sf * 0.75 + th * 0.45, 0, 1);
+      gT = (0.014 + drive * 0.038) * m;
+      fT = 170 + drive * 260; humF = 47 + drive * 24; sawF = 94 + drive * 66;
+      propT = drive * drive * 0.016 * m;
+      washT = sf * sf * 0.02 * m;
+      // hull creaks: rare; sooner when deep or when a hunter is close
+      this._creakT -= 1;
+      if (this._creakT <= 0){
+        let near = false;
+        for (const h of G.hunters){ if (!h.dead && h.group.position.distanceToSquared(player.group.position) < 3600){ near = true; break; } }
+        const deep = G.mode === 'survival' ? clamp((-player.group.position.y) / 300, 0, 1) : (G.zone ? (G.zone.id - 1) / 4 : 0);
+        this._creakT = rand(160, 340) * (1 - deep * 0.35) * (near ? 0.45 : 1);
+        this.creak();
+      }
+    } else if (uiState === 'hangar'){ gT = 0.006 * m; } // faint docked hum
+    const now = ctx.currentTime;
+    try {
+      this.engGain.gain.setTargetAtTime(gT, now, gT > this.engGain.gain.value ? 0.16 : 0.3);
+      this.engFilter.frequency.setTargetAtTime(fT, now, 0.25);
+      this.engHum.frequency.setTargetAtTime(humF, now, 0.3);
+      this.engSaw.frequency.setTargetAtTime(sawF, now, 0.3);
+      this.propGain.gain.setTargetAtTime(propT, now, 0.2);
+      this.washGain.gain.setTargetAtTime(washT, now, 0.35);
+    } catch(e) {}
+  },
+  creak(){ // short metallic hull groan: bandpass-swept noise, kept very quiet
+    if (this.muted() || !this.noiseBuf) return;
+    const ctx = AudioSys.ctx, t = ctx.currentTime + 0.02, dur = rand(0.25, 0.5);
+    try {
+      const src = ctx.createBufferSource(); src.buffer = this.noiseBuf;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 9;
+      bp.frequency.setValueAtTime(rand(500, 800), t);
+      bp.frequency.exponentialRampToValueAtTime(rand(120, 200), t + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(rand(0.02, 0.045), t + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(bp); bp.connect(g); g.connect(ctx.destination);
+      src.start(t, rand(0, 1.2)); src.stop(t + dur + 0.05);
+    } catch(e) {}
   },
   tensionTick(){
     if (!this.started) return;
@@ -903,6 +1065,50 @@ function spawnPlayer(scene, subId, pos){
   return { group, vel:new THREE.Vector3(), yaw: Math.PI, pitch: 0, d, subId,
            hull: Math.round(d.maxHull * frac), batt: d.maxBatt, radius: 2.6, thrust: 0 };
 }
+// ---- eel swim: vertex bend via onBeforeCompile (the hunter GLBs have no skeleton).
+// The bend runs along each geometry's longest axis, weighted so the tail end sways
+// most and the head stays stable; amplitude/rate are driven per-frame from swim speed.
+const SWIM_TIME = { value: 0 };
+function applySwim(group, kind){
+  const uniforms = { uTime: SWIM_TIME, uAmp: { value: kind === 'sway' ? 0.05 : 0 }, uFreq: { value: 2.6 },
+    uRate: { value: kind === 'sway' ? 1.6 : 7 }, uPhase: { value: rand(0, Math.PI * 2) },
+    uMin: { value: 0 }, uSpan: { value: 1 }, uAxisMask: { value: new THREE.Vector3(1, 0, 0) },
+    uLatMask: { value: new THREE.Vector3(0, 0, 1) }, uWgtTop: { value: 0 }, uVertK: { value: 1 } };
+  let measured = false;
+  group.traverse(o => {
+    if (!o.isMesh || o.userData.noReveal || (o.material && o.material.isMeshBasicMaterial)) return;
+    if (!measured){
+      o.geometry.computeBoundingBox();
+      const bb = o.geometry.boundingBox, sz = new THREE.Vector3(); bb.getSize(sz);
+      const ax = (sz.x >= sz.y && sz.x >= sz.z) ? 0 : (sz.y >= sz.z ? 1 : 2);
+      const mins = [bb.min.x, bb.min.y, bb.min.z], spans = [sz.x, sz.y, sz.z];
+      uniforms.uMin.value = mins[ax]; uniforms.uSpan.value = Math.max(0.001, spans[ax]);
+      uniforms.uAxisMask.value.set(ax === 0 ? 1 : 0, ax === 1 ? 1 : 0, ax === 2 ? 1 : 0);
+      if (ax === 0){ uniforms.uLatMask.value.set(0, 0, 1); uniforms.uWgtTop.value = 0; uniforms.uVertK.value = 1; }
+      else if (ax === 2){ uniforms.uLatMask.value.set(1, 0, 0); uniforms.uWgtTop.value = 0; uniforms.uVertK.value = 1; }
+      else { uniforms.uLatMask.value.set(1, 0, 0); uniforms.uWgtTop.value = 1; uniforms.uVertK.value = 0; } // upright body: top sways
+      measured = true;
+    }
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats){
+      m.onBeforeCompile = (sh) => {
+        Object.assign(sh.uniforms, uniforms);
+        sh.vertexShader = ('uniform float uTime; uniform float uAmp; uniform float uFreq; uniform float uRate; uniform float uPhase;\n' +
+          'uniform float uMin; uniform float uSpan; uniform vec3 uAxisMask; uniform vec3 uLatMask; uniform float uWgtTop; uniform float uVertK;\n') +
+          sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+            {
+              float along = clamp((dot(position, uAxisMask) - uMin) / uSpan, 0.0, 1.0);
+              float wgt = mix(pow(1.0 - along, 1.5), pow(along, 1.5), uWgtTop);
+              float ph = along * uFreq - uTime * uRate + uPhase;
+              transformed += uLatMask * (sin(ph) * uAmp * uSpan * wgt);
+              transformed.y += cos(ph * 0.85) * uAmp * uSpan * 0.22 * wgt * uVertK;
+            }`);
+      };
+      m.customProgramCacheKey = () => 'pf-swim';
+    }
+  });
+  return uniforms;
+}
 function spawnHunter(scene, typeId, pos, opts = {}){
   const t = CONFIG.hunters[typeId];
   const group = makeAsset(t.model);
@@ -916,6 +1122,7 @@ function spawnHunter(scene, typeId, pos, opts = {}){
     group.add(core); group.userData.core = core;
   }
   attachCoreGlow(group.userData.core, CONFIG.hunterStates.dormant.core);
+  const swimU = applySwim(group, (typeId === 'sentry' || opts.trioRole === 'eye') ? 'sway' : 'swim');
   group.userData.isHunter = true;
   const hpMul = (opts.hpMul || 1) * (opts.swiftHp ? CONFIG.warden.swiftHpMul : 1);
   const h = { type: t, typeId, group, hp: Math.max(1, Math.round(t.hp * hpMul)), awareness: opts.aggro ? 1 : 0,
@@ -923,7 +1130,7 @@ function spawnHunter(scene, typeId, pos, opts = {}){
     hitCd: 0, closeCd: 0, disabled: 0, sentryT: rand(2.5, 5.5), phase: rand(0, Math.PI * 2),
     ancient: !!opts.ancient, warden: opts.warden || null, trioRole: opts.trioRole || null,
     dmgTakenMul: opts.dmgTakenMul || 1, speedMul: (opts.speedMul || 1), splitDone: false, dead: false,
-    vel: new THREE.Vector3() };
+    swim: swimU, vel: new THREE.Vector3() };
   G.hunters.push(h);
   return h;
 }
@@ -934,11 +1141,14 @@ function spawnCrystal(scene, pos, value, golden = false){
   scene.add(group);
   registerReveal(group, { min: 0.04 });
   if (golden) tintRevealEntries(group, 0xffc93a, 0.85);
-  const halo = makeGlowSprite(golden ? 0xffc93a : 0x6ff5e2, golden ? 11 : 8, golden ? 0.55 : 0.42);
+  // Dimmer, sonar-driven halo (was scale 8/11 at full opacity — visible across the
+  // arena). Now the halo's brightness is driven by the ping-reveal factor in the
+  // crystal update loop: near-invisible in the dark, flaring on a fresh ping.
+  const halo = makeGlowSprite(golden ? 0xffc93a : 0x6ff5e2, golden ? 4.6 : 3.2, 0.05);
   halo.position.y = 0.6;
   group.add(halo);
-  addGlowPulse(halo, 0.16, 1.7, 0.1);
-  const c = { group, value, golden, taken: false, baseY: pos.y, phase: rand(0, Math.PI * 2) };
+  const c = { group, value, golden, taken: false, baseY: pos.y, phase: rand(0, Math.PI * 2),
+              halo, haloBase: golden ? 0.55 : 0.42, haloScale: golden ? 4.6 : 3.2 };
   G.crystals.push(c);
   return c;
 }
@@ -1304,6 +1514,88 @@ const dressing = {
 };
 
 // ============================ DECOR ============================
+// ---- procedural coral + kelp beds (no new assets; instanced, decoration only) ----
+let _coralGeos = null;
+function coralGeos(){
+  if (_coralGeos) return _coralGeos;
+  const fan = new THREE.CylinderGeometry(1.7, 0.22, 2.4, 7, 1, true); // fan coral
+  fan.scale(1, 1, 0.32); fan.translate(0, 1.2, 0);
+  const brain = new THREE.IcosahedronGeometry(1.15, 1);               // brain coral
+  brain.scale(1, 0.55, 1); brain.translate(0, 0.5, 0);
+  const parts = [];                                                    // staghorn coral
+  const trunk = new THREE.CylinderGeometry(0.16, 0.3, 1.6, 6); trunk.translate(0, 0.8, 0); parts.push(trunk);
+  for (let i = 0; i < 5; i++){
+    const b = new THREE.CylinderGeometry(0.05, 0.13, rand(1.1, 1.7), 5);
+    b.translate(0, 0.75, 0);
+    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rand(-0.4, 0.4), (i / 5) * Math.PI * 2, rand(0.35, 0.75) * (i % 2 ? 1 : -1)));
+    m.setPosition(rand(-0.15, 0.15), rand(0.9, 1.4), rand(-0.15, 0.15));
+    b.applyMatrix4(m); parts.push(b);
+  }
+  _coralGeos = { fan, brain, stag: mergeGeometries(parts) };
+  return _coralGeos;
+}
+function coralMesh(geo, n, accentHex, eInt){
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62, metalness: 0.05,
+    emissive: accentHex, emissiveIntensity: eInt, side: THREE.DoubleSide });
+  const im = new THREE.InstancedMesh(geo, mat, n);
+  im.userData.flora = true;
+  return im;
+}
+const FLORA_PALETTE = [0xff8c5a, 0xff5a7a, 0x35e0c8, 0xb46aff, 0xffc93a];
+function addFlora(g, zone){ // Expedition: coral clusters + kelp beds on the arena floor
+  const F = CONFIG.arena.floorY;
+  const geos = coralGeos();
+  const accent = new THREE.Color(zone.tint.accent);
+  const palette = FLORA_PALETTE.map(h => new THREE.Color(h).lerp(accent, 0.4));
+  const dummy = new THREE.Object3D(), col = new THREE.Color();
+  const fill = (im, n, sMin, sMax) => {
+    for (let i = 0; i < n; i++){
+      const p = randArenaPos(24, 214, 0, 0);
+      dummy.position.set(p.x, F - 1.6, p.z);
+      dummy.rotation.set(rand(-0.12, 0.12), rand(0, Math.PI * 2), rand(-0.12, 0.12));
+      const s = rand(sMin, sMax); dummy.scale.set(s, s * rand(0.8, 1.25), s);
+      dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix);
+      col.copy(pick(palette)).offsetHSL(rand(-0.03, 0.03), 0, rand(-0.06, 0.06));
+      im.setColorAt(i, col);
+    }
+    im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    g.add(im);
+  };
+  fill(coralMesh(geos.fan, 30, zone.tint.accent, 0.32), 30, 1.1, 2.6);
+  fill(coralMesh(geos.brain, 24, zone.tint.accent, 0.22), 24, 0.9, 2.2);
+  fill(coralMesh(geos.stag, 26, zone.tint.accent, 0.38), 26, 1.0, 2.3);
+  const kelpMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x2e7d4f).lerp(accent, 0.25).getHex(), roughness: 0.6, metalness: 0.05,
+    emissive: new THREE.Color(0x1d5c38).lerp(accent, 0.3).getHex(), emissiveIntensity: 0.35, side: THREE.DoubleSide, transparent: true, opacity: 0.92 });
+  for (let b = 0; b < 7; b++){
+    const c = randArenaPos(30, 205, 0, 0), n = randi(3, 5);
+    for (let i = 0; i < n; i++) addKelp(g, kelpMat, c.x + rand(-7, 7), F - 2, c.z + rand(-7, 7), zone.tint.accent);
+  }
+}
+function addSurvivalFlora(grp){ // Survival: coral on the shaft's inner ledges + a few kelp strands
+  const S = CONFIG.survival, geos = coralGeos();
+  const dummy = new THREE.Object3D(), col = new THREE.Color();
+  const palette = FLORA_PALETTE.map(h => new THREE.Color(h).lerp(new THREE.Color(0x7fe0ff), 0.35));
+  const ledge = () => { const a = rand(0, Math.PI * 2), r = S.shaftRadius - rand(3, 9);
+    return { x: Math.cos(a) * r, z: Math.sin(a) * r, y: -randi(0, 7) * 50 - rand(4, 46) }; };
+  const fill = (im, n, sMin, sMax) => {
+    for (let i = 0; i < n; i++){
+      const p = ledge();
+      dummy.position.set(p.x, p.y, p.z);
+      dummy.rotation.set(rand(-0.15, 0.15), rand(0, Math.PI * 2), rand(-0.15, 0.15));
+      const s = rand(sMin, sMax); dummy.scale.set(s, s, s);
+      dummy.updateMatrix(); im.setMatrixAt(i, dummy.matrix);
+      col.copy(pick(palette)).offsetHSL(0, 0, rand(-0.06, 0.06)); im.setColorAt(i, col);
+    }
+    im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    grp.add(im);
+  };
+  fill(coralMesh(geos.fan, 16, 0x2a7a8c, 0.3), 16, 0.9, 2.0);
+  fill(coralMesh(geos.stag, 16, 0x2a7a8c, 0.36), 16, 0.9, 2.0);
+  fill(coralMesh(geos.brain, 8, 0x2a7a8c, 0.22), 8, 0.9, 1.8);
+  const kelpMat = new THREE.MeshStandardMaterial({ color: 0x27573f, roughness: 0.6, metalness: 0.05,
+    emissive: 0x14301f, emissiveIntensity: 0.35, side: THREE.DoubleSide, transparent: true, opacity: 0.92 });
+  for (let i = 0; i < 12; i++){ const p = ledge(); addKelp(grp, kelpMat, p.x, p.y, p.z, 0x7fe0ff); }
+}
 function addDecor(scene, zone){
   resetEnvFx();
   const A = CONFIG.arena, F = A.floorY;
@@ -1336,6 +1628,7 @@ function addDecor(scene, zone){
   }
   const dz = dressing[zone.decor];
   if (dz) dz(g, zone, rocks);
+  addFlora(g, zone);
   g.add(rocks.build());
   registerReveal(g, { min: 0.3 });
   addMarineSnow(scene);
@@ -1359,6 +1652,7 @@ function addSurvivalDressing(scene){
   }
   const grp = new THREE.Group();
   grp.add(batch.build());
+  addSurvivalFlora(grp);
   scene.add(grp);
   registerReveal(grp, { min: 0.24 });
   envFx.shaft = grp;
@@ -1403,6 +1697,7 @@ function startExpedition(zone){
   setUI('playing');
   updateObjective();
   toast(zone.name + ' — ' + zone.desc, 3400);
+  Music.diveCue();
 }
 
 // ============================ START: SURVIVAL ============================
@@ -1462,6 +1757,7 @@ function startSurvival(diffId){
   setUI('playing');
   updateObjective();
   toast('SURVIVAL — ' + G.diff.label + '. Descend. The deep pays more, and bites harder.', 3600);
+  Music.diveCue();
 }
 
 // ============================ GAMEPLAY SYSTEMS ============================
@@ -1702,7 +1998,17 @@ function updateHunters(dt){
         } else h.vel.multiplyScalar(Math.max(0, 1 - 3 * dt));
       }
       pos.addScaledVector(h.vel, dt);
-      if (h.vel.lengthSq() > 0.5) g.lookAt(pos.clone().add(h.vel));
+      if (h.vel.lengthSq() > 0.5){
+        g.lookAt(pos.clone().add(h.vel));
+        // banking into turns + a gentle pitch wave (eel feel; complements the vertex bend)
+        const yaw = Math.atan2(h.vel.x, h.vel.z);
+        let dy = yaw - (h.lastYaw !== undefined ? h.lastYaw : yaw);
+        while (dy > Math.PI) dy -= Math.PI * 2; while (dy < -Math.PI) dy += Math.PI * 2;
+        h.lastYaw = yaw;
+        h.bank = lerp(h.bank || 0, clamp(-dy / Math.max(dt, 0.001) * 0.14, -0.5, 0.5), clamp(dt * 5, 0, 1));
+        g.rotateZ(h.bank + Math.sin(G.time * 2.1 + h.phase) * 0.045);
+        g.rotateX(Math.sin(G.time * 1.7 + h.phase * 1.3) * 0.04);
+      }
       if (G.mode === 'expedition'){
         const horiz = Math.hypot(pos.x, pos.z), A = CONFIG.arena;
         if (horiz > A.radius){ const s = A.radius / horiz; pos.x *= s; pos.z *= s; }
@@ -1712,6 +2018,19 @@ function updateHunters(dt){
         if (horiz > S.shaftRadius){ const s = S.shaftRadius / horiz; pos.x *= s; pos.z *= s; }
         if (pos.y > 4) pos.y = 4;
         if (pos.y < pp.y - 320 && !boss){ h.dead = true; removeEntity(g); continue; } // left far behind in the descent
+      }
+    } else {
+      // sentries / guardian eyes don't swim — a slow scanning sway + hover bob instead
+      g.rotation.y = Math.sin(G.time * 0.26 + h.phase) * 0.16;
+      pos.y = h.home.y + Math.sin(G.time * 0.5 + h.phase * 1.7) * 0.35;
+    }
+    if (h.swim){ // vertex-bend drive: amplitude/rate follow the actual swim speed
+      if (stationary){ h.swim.uAmp.value = 0.05; h.swim.uRate.value = 1.6; }
+      else {
+        const sf = h.type.speed > 0 ? clamp(h.vel.length() / h.type.speed, 0, 1.2) : 0;
+        const k = h.typeId === 'skitter' ? 1.3 : 1;
+        h.swim.uAmp.value = (0.05 + sf * 0.15) * k;
+        h.swim.uRate.value = (4.5 + sf * 6.5) * k;
       }
     }
     // contact damage
@@ -1762,6 +2081,17 @@ function updateHazardsAndPickups(dt){
     if (c.taken) continue;
     c.group.rotation.y += dt * 0.8;
     c.group.position.y = c.baseY + Math.sin(G.time * 1.3 + c.phase) * 0.9;
+    if (c.halo){ // halo brightness follows the sonar reveal (+ a proximity shimmer up close)
+      const rv = c.group.userData.reveal;
+      let f = 0.04;
+      if (rv) f = (G.time >= rv.at) ? rv.min + (1 - rv.min) * clamp(1 - (G.time - rv.at) / rv.dur, 0, 1) : rv.min;
+      const prox = clamp(1 - c.group.position.distanceTo(pp) / 16, 0, 1) * 0.35;
+      f = Math.max(f, prox);
+      const pulse = 1 + Math.sin(G.time * 1.7 + c.phase) * 0.12;
+      c.halo.material.opacity = c.haloBase * Math.pow(f, 1.35) * pulse;
+      const hs = c.haloScale * (0.55 + 0.45 * f) * pulse;
+      c.halo.scale.set(hs, hs, 1);
+    }
     if (c.group.position.distanceTo(pp) < 4.6){
       c.taken = true; removeEntity(c.group);
       let v = c.value;
@@ -2112,6 +2442,7 @@ function endRun(result){
   $('end-stars').textContent = starsHtml;
   $('end-stats').innerHTML = rows.map(r => `<div class="endstat"><span>${r[0]}</span><b>${r[1]}</b></div>`).join('');
   $('btn-end-next').textContent = G.mode === 'expedition' ? 'ZONE SELECT' : 'TITLE';
+  Music.riseCue();
   setUI('end');
 }
 
@@ -2126,18 +2457,21 @@ function updatePlayer(dt){
   }
   const fwd = playerForward();
   const right = new THREE.Vector3(1, 0, 0).applyEuler(new THREE.Euler(p.pitch, p.yaw, 0, 'YXZ'));
-  let thrust = 0, strafe = 0;
+  let thrust = 0, strafe = 0, vert = 0;
   if (keys['KeyW']) thrust += 1;
   if (keys['KeyS']) thrust -= 0.7;
   if (keys['KeyD']) strafe -= 0.75;
   if (keys['KeyA']) strafe += 0.75;
+  if (keys['KeyR']) vert += 1;   // direct rise (F is torpedo, Space is ping — R/C were free)
+  if (keys['KeyC']) vert -= 1;   // direct sink
   const maxSp = p.d.def.speed * G.boon.speedMul, accel = 46;
   p.vel.addScaledVector(fwd, thrust * accel * dt);
   p.vel.addScaledVector(right, strafe * accel * dt);
+  p.vel.y += vert * accel * 0.7 * dt; // ~0.7x thrust rate, capped by the same max-speed clamp below
   p.vel.multiplyScalar(Math.max(0, 1 - 1.9 * dt));
   const sp = p.vel.length();
   if (sp > maxSp) p.vel.multiplyScalar(maxSp / sp);
-  p.thrust = Math.abs(thrust) + Math.abs(strafe) * 0.7;
+  p.thrust = Math.abs(thrust) + Math.abs(strafe) * 0.7 + Math.abs(vert) * 0.7;
   g.position.addScaledVector(p.vel, dt);
   if (G.mode === 'expedition'){
     const A = CONFIG.arena, horiz = Math.hypot(g.position.x, g.position.z);
@@ -2197,7 +2531,7 @@ function updateHUD(){
   $('time-txt').textContent = fmtTime(G.time);
   if (G.hintStep >= 0 && G.mode === 'expedition' && G.zone && G.zone.id === 1){
     const steps = [
-      '🖱 Click the water to lock your view. W = thrust, mouse steers.',
+      '🖱 Click the water to lock your view. W = thrust, mouse steers. R = rise, C = sink.',
       '📡 Press SPACE — a sonar ping reveals the trench… and announces you.',
       '💎 Collect glowing crystals. Watch the NOISE meter: hunters hear pings.',
       '🎯 Fill the quota and the gate at the far end of the trench opens.',
@@ -2219,6 +2553,7 @@ const huntVigEl = document.getElementById('huntvig');
 function animate(){
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
+  SWIM_TIME.value = G ? G.time : performance.now() / 1000; // hunter vertex-bend clock (freezes on pause with G.time)
   // hunt vignette: subtle red edge pulse while a hunter is hunting you (driven by Music.tension)
   if (huntVigEl){
     const vigTgt = (uiState === 'playing' && Music.tension > 0.04)
