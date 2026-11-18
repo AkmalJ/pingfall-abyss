@@ -258,9 +258,14 @@ const AudioSys = {
 };
 
 // ============================ MUSIC (generative ambient score) ============================
-// Dark underwater theme over Am–F–Am–E: deep drone + slow bell motif (the "theme song")
-// through a feedback-delay abyss echo. In dives the motif thins out; a tension layer
-// (heartbeat + minor-2nd pad) tracks hunting hunters / high NOISE and fades with the hunt.
+// TWO different compositions, crossfaded by gameMix (~2 s):
+//  LOBBY (title / hangar / zones) — the "theme song": dark theme over Am–F–Am–E,
+//    deep drone + slow bell motif through a feedback-delay abyss echo.
+//  GAME (expedition + survival dives) — a separate piece, NOT a remix: the bell
+//    melody is gone entirely; a pulsing A1/E1 sub-bass heartbeat is the backbone,
+//    under a sparse two-chord pad drift (Am–F open fifths, two bars each) and the
+//    dive-only undertow. A tension layer (heartbeat + minor-2nd pad) tracks
+//    hunting hunters / high NOISE and fades with the hunt.
 // Music ducks (keeps playing quietly) under pause / boon / end screens.
 const MUSIC_STEP = 1.05; // seconds per step; 16 steps = one 4-bar loop
 const Music = {
@@ -347,9 +352,10 @@ const Music = {
     try {
       this.bus.gain.setTargetAtTime(lvl, now, snap ? 0.05 : 1.2);
       // mode character: lobby = open pads + full bell motif; dives = dark pads
-      // (380 Hz), motif thinned to 0.35, drone sunk; duck (pause/end) in between.
+      // (380 Hz), motif bus closed entirely (the game piece has no bells),
+      // drone sunk; duck (pause/end) in between.
       this.padFilter.frequency.setTargetAtTime(m === 'game' ? 380 : m === 'duck' ? 520 : 1150, now, snap ? 0.1 : 0.9);
-      this.motifBus.gain.setTargetAtTime(m === 'game' ? 0.35 : 1, now, snap ? 0.1 : 0.9);
+      this.motifBus.gain.setTargetAtTime(m === 'game' ? 0 : 1, now, snap ? 0.1 : 0.9);
       this.droneFilter.frequency.setTargetAtTime(m === 'game' ? 140 : m === 'duck' ? 170 : 210, now, snap ? 0.1 : 0.9);
       this.cueBus.gain.setTargetAtTime(this.muted() ? 0 : 0.8, now, snap ? 0.05 : 0.4);
     } catch(e) {}
@@ -370,42 +376,63 @@ const Music = {
       o.start(t); o.stop(t + decay + 0.05);
     }
   },
-  pad(midis, t, dur){
+  pad(midis, t, dur, vol = 1){
     const ctx = AudioSys.ctx;
     for (const m of midis){
       const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = this.mf(m);
       const og = ctx.createGain();
       og.gain.setValueAtTime(0, t);
-      og.gain.linearRampToValueAtTime(0.030, t + 1.4);
-      og.gain.setValueAtTime(0.030, Math.max(t + 1.4, t + dur - 1.2));
+      og.gain.linearRampToValueAtTime(0.030 * vol, t + 1.4);
+      og.gain.setValueAtTime(0.030 * vol, Math.max(t + 1.4, t + dur - 1.2));
       og.gain.linearRampToValueAtTime(0, t + dur);
       o.connect(og); og.connect(this.padFilter);
       o.start(t); o.stop(t + dur + 0.05);
     }
   },
-  bass(m, t){
+  bass(m, t, vol = 1){
     const ctx = AudioSys.ctx;
     const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = this.mf(m);
     const og = ctx.createGain();
-    og.gain.setValueAtTime(0.14, t);
+    og.gain.setValueAtTime(0.14 * vol, t);
     og.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
     o.connect(og); og.connect(this.bus);
     o.start(t); o.stop(t + 2.7);
   },
+  pulse(m, t, vol){ // game-piece backbone: a deep sub-bass throb (sine + faint
+    // octave body) sent through the abyss echo — a slow sonar heartbeat.
+    const ctx = AudioSys.ctx, f = this.mf(m);
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+    const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = f * 2;
+    const g2 = ctx.createGain(); g2.gain.value = 0.22;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16 * vol, t + 0.09);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2.9);
+    o.connect(g); o2.connect(g2); g2.connect(g);
+    g.connect(this.bus); g.connect(this.delay);
+    o.start(t); o.stop(t + 3); o2.start(t); o2.stop(t + 3);
+  },
   scheduleStep(s, t){
+    const gm = this.gameMix, lw = 1 - gm; // crossfade weights: game / lobby
+    // ---- LOBBY piece: Am–F–Am–E, plucked bass + pad per bar, bell motif ----
     const CH = [ { r:33, pad:[57,60,64] },   // Am
                  { r:29, pad:[53,57,60] },   // F
                  { r:33, pad:[57,60,64] },   // Am
                  { r:28, pad:[52,56,59] } ]; // E
-    if (s % 4 === 0){ const c = CH[Math.floor(s / 4)]; this.bass(c.r, t); this.pad(c.pad, t, MUSIC_STEP * 4); }
-    // dive undertow: a slow sonar bloom that only exists underwater
-    if (this.gameMix > 0.35 && s % 8 === 4) this.undertow(t);
+    if (s % 4 === 0 && lw > 0.04){ const c = CH[Math.floor(s / 4)]; this.bass(c.r, t, lw); this.pad(c.pad, t, MUSIC_STEP * 4, lw); }
     const MEL = { 0:69, 2:72, 4:76, 6:74, 8:72, 10:69, 12:67, 14:64 }; // A4 C5 E5 D5 C5 A4 G4 E4
     const m = MEL[s];
-    if (m !== undefined){
-      if (this.gameMix < 0.5) this.bell(m, t, 0.105, 3.6);        // lobby: the full motif
-      else if (s === 0 || s === 8) this.bell(m, t, 0.055, 3.0);  // dive: two soft notes per loop
+    if (m !== undefined && lw > 0.04) this.bell(m, t, 0.105 * lw, 3.6);
+    // ---- GAME piece: no bells at all. Sub-bass pulse backbone (strong A1/E1
+    // on the bar, softer echo two steps later) + a dark two-chord pad drift:
+    // Am – F as open fifths, each held two bars. ----
+    if (gm > 0.04){
+      if (s % 8 === 0) this.pad(s === 0 ? [45,52,57] : [41,48,53], t, MUSIC_STEP * 8, gm * 1.15);
+      if (s % 4 === 0) this.pulse(s % 8 === 0 ? 33 : 28, t, gm);
+      else if (s % 4 === 2) this.pulse(s % 8 === 2 ? 33 : 28, t, gm * 0.45);
     }
+    // dive undertow: a slow sonar bloom that only exists underwater
+    if (gm > 0.35 && s % 8 === 4) this.undertow(t);
   },
   undertow(t){
     const ctx = AudioSys.ctx, gm = this.gameMix;
@@ -855,6 +882,27 @@ function buildHangarScene(){
   const pts = makeParticles(240, 120, 60, 120); hangarScene.add(pts);
   refreshHangarPreview();
 }
+// The hangar layout reserves an open central stage (#hangar-stage) between the
+// sub-card column and the shop column. hangarFrame() reports that stage's centre
+// as a fraction of the window plus the half-angles the stage subtends inside the
+// full-frame frustum, so the preview can be fitted into — and centred on — the
+// open region instead of hiding behind the panels. Falls back to the full frame
+// while the hangar screen is hidden (e.g. during boot).
+function hangarFrame(){
+  const W = window.innerWidth, H = window.innerHeight;
+  const vHalf = THREE.MathUtils.degToRad(camera.fov / 2);
+  const hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
+  const el = $('hangar-stage');
+  if (el){
+    const r = el.getBoundingClientRect();
+    if (r.width > 40 && r.height > 40){
+      return { fx:(r.left + r.width / 2) / W, fy:(r.top + r.height / 2) / H,
+               vHalf:Math.atan(Math.tan(vHalf) * (r.height / H)),
+               hHalf:Math.atan(Math.tan(hHalf) * (r.width / W)) };
+    }
+  }
+  return { fx:0.5, fy:0.5, vHalf, hHalf };
+}
 function refreshHangarPreview(){
   if (!hangarScene) return;
   if (hangarPreview){ hangarScene.remove(hangarPreview); }
@@ -865,11 +913,11 @@ function refreshHangarPreview(){
   hangarScene.add(hangarPreview);
   hangarScene.userData.rim.color.setHex(accentHex(subId));
   // Frame the whole sub: fit the preview camera distance to this model's bounding
-  // sphere, so big hulls (Leviathan) are fully in frame instead of cropped.
+  // sphere within the open stage region, so big hulls (Leviathan) are fully
+  // visible bow-to-stern instead of cropped or buried behind the panels.
   const sphere = new THREE.Box3().setFromObject(hangarPreview).getBoundingSphere(new THREE.Sphere());
-  const vHalf = THREE.MathUtils.degToRad(camera.fov / 2);
-  const hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
-  const fitDist = sphere.radius / Math.sin(Math.min(vHalf, hHalf));
+  const fr = hangarFrame();
+  const fitDist = sphere.radius / Math.sin(Math.min(fr.vHalf, fr.hHalf));
   hangarCamDist = clamp(fitDist * 1.12, 14, 40);
 }
 
@@ -1007,8 +1055,17 @@ document.addEventListener('mousemove', e => {
   }
   if (uiState === 'hangar' && hangarPreview && e.buttons === 1) hangarPreview.rotation.y += e.movementX * 0.01;
 });
-canvas.addEventListener('wheel', e => {
-  if (uiState === 'hangar'){ hangarCamDist = clamp(hangarCamDist + Math.sign(e.deltaY) * 1.6, 8, 40); }
+// Wheel zoom for the hangar preview. This listens on window, not the canvas:
+// the .screen overlay always covers the canvas, so a canvas listener never
+// fires. It is gated to the open stage rect so wheeling over the side columns
+// still scrolls them instead of zooming.
+window.addEventListener('wheel', e => {
+  if (uiState !== 'hangar') return;
+  const el = $('hangar-stage'); if (!el) return;
+  const r = el.getBoundingClientRect();
+  if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom){
+    hangarCamDist = clamp(hangarCamDist + Math.sign(e.deltaY) * 1.6, 8, 40);
+  }
 }, { passive:true });
 
 // ============================ GAME SESSION ============================
@@ -2583,7 +2640,15 @@ function animate(){
     if (gameScene) renderer.render(gameScene, camera);
   }
   else if (uiState === 'hangar'){
-    if (hangarPreview) hangarPreview.rotation.y += dt * 0.25;
+    if (hangarPreview){
+      hangarPreview.rotation.y += dt * 0.25;
+      // Centre the sub on the open stage region (not the window): offset it by
+      // the stage centre's displacement from frame centre, scaled to the
+      // frustum size at the current camera distance so zoom keeps it centred.
+      const fr = hangarFrame();
+      const visH = 2 * hangarCamDist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      hangarPreview.position.set((fr.fx - 0.5) * visH * camera.aspect, (0.5 - fr.fy) * visH, 0);
+    }
     camera.position.set(0, 1.4, hangarCamDist);
     camera.lookAt(0, 0, 0);
     if (hangarScene) renderer.render(hangarScene, camera);

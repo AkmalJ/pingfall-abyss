@@ -81,6 +81,20 @@
   .boon:hover{border-color:var(--accent);box-shadow:0 0 16px rgba(46,230,200,.4);}
   .boon .ic{font-size:34px;margin-bottom:6px;}
   .note{font-size:12.5px;color:var(--ink-dim);text-align:center;margin-top:12px;}
+  /* HANGAR: two side columns + an open central stage so the 3D sub preview is
+     never buried under panels. The stage is pointer-events:none so drag-rotate
+     and wheel-zoom reach the canvas; game.js aims the preview into its rect. */
+  #scr-hangar{justify-content:flex-start;padding:14px 16px;}
+  #scr-hangar .topbar{max-width:none;margin-bottom:10px;}
+  #scr-hangar .hgroup{display:flex;align-items:center;gap:14px;}
+  .hangar-main{display:flex;gap:14px;width:100%;flex:1;min-height:0;}
+  .hangar-col{width:326px;flex:none;overflow-y:auto;overflow-x:hidden;}
+  #hangar-subs .cards{grid-template-columns:1fr;}
+  #hangar-shop{width:334px;padding:18px 20px 64px;}
+  .hangar-stage{flex:1;min-width:0;position:relative;pointer-events:none;}
+  .hangar-hint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);white-space:nowrap;
+    background:rgba(4,18,24,.72);border:1px solid rgba(46,230,200,.28);border-radius:9px;
+    padding:8px 16px;font-size:13.5px;color:var(--ink-dim);}
   #toast{position:fixed;top:76px;left:50%;transform:translateX(-50%);z-index:20;background:rgba(4,18,24,.9);border:1px solid var(--panel-edge);
          padding:9px 20px;border-radius:9px;font-size:15px;display:none;}
 </style>
@@ -140,21 +154,25 @@
 </div>
 
 <!-- HANGAR -->
-<div class="screen" id="scr-hangar" style="justify-content:flex-start;overflow-y:auto">
-  <div class="topbar"><div class="title">⚓ HANGAR</div><div>🪙 <span class="coins" id="hangar-coins">0</span></div></div>
-  <div class="row" style="max-width:860px;width:100%;align-items:flex-start">
-    <div style="flex:1.25;min-width:320px">
-      <div class="grid cards" id="sub-cards" style="grid-template-columns:1fr 1fr"></div>
+<div class="screen" id="scr-hangar">
+  <div class="topbar">
+    <div class="hgroup"><button class="btn small" id="btn-hangar-back">← BACK</button><div class="title">⚓ HANGAR</div></div>
+    <div>🪙 <span class="coins" id="hangar-coins">0</span></div>
+  </div>
+  <div class="hangar-main">
+    <div class="hangar-col" id="hangar-subs">
+      <div class="grid cards" id="sub-cards"></div>
     </div>
-    <div style="flex:1;min-width:290px" class="panel">
+    <div class="hangar-stage" id="hangar-stage">
+      <div class="hangar-hint">Drag on the water to rotate the sub · scroll to zoom</div>
+    </div>
+    <div class="hangar-col panel" id="hangar-shop">
       <h2 style="font-size:16px">UPGRADES</h2>
       <div id="upgrade-list"></div>
       <h2 style="font-size:16px;margin-top:16px">SUPPLIES</h2>
       <div id="supply-list"></div>
-      <div class="note">Drag on the water to rotate the sub · scroll to zoom</div>
     </div>
   </div>
-  <button class="btn small" id="btn-hangar-back">← BACK</button>
 </div>
 
 <!-- HOW TO -->
