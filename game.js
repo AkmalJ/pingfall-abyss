@@ -2928,6 +2928,22 @@ function updateSurvivalGate(){
       }
     }
   }
+  // One-way descent seal (Akmal playtest 19 Nov): once you have dived into
+  // a deeper floor, the current seals the shaft behind you — you cannot
+  // rise back into the floor above. Mirrors the locked-gate clamp below:
+  // same 3 m margin, same shove, so the seal reads as water, not a wall.
+  if (G.floor > 0){
+    const ceilY = -G.floor * S.floorDepth, pp = player.group.position;
+    if (pp.y > ceilY - 3){
+      pp.y = ceilY - 3;
+      if (player.vel.y > 0) player.vel.y = -Math.abs(player.vel.y) * 0.25; // sealed current shoves you back down
+      if (G.time > G.gateWarnT){
+        G.gateWarnT = G.time + 3;
+        toast('⛔ SEALED — no way back up. Down is the only way.');
+        AudioSys.tone(140, 0.18, 'sawtooth', 0.07, 90);
+      }
+    }
+  }
 }
 
 // ============================ SURVIVAL DIRECTOR ============================
