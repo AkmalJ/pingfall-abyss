@@ -81,6 +81,11 @@
   #btn-sound{position:fixed;right:14px;bottom:14px;z-index:30;width:44px;height:44px;border-radius:50%;border:1px solid var(--panel-edge);
              background:rgba(6,24,30,.8);color:var(--ink);font-size:19px;cursor:pointer;line-height:1;}
   #btn-sound:hover{background:rgba(46,230,200,.2);}
+  #btn-fs{position:fixed;right:68px;bottom:14px;z-index:30;width:44px;height:44px;border-radius:50%;border:1px solid var(--panel-edge);
+             background:rgba(6,24,30,.8);color:var(--ink);font-size:19px;cursor:pointer;line-height:1;display:none;}
+  #btn-fs:hover{background:rgba(46,230,200,.2);}
+  body.touch #btn-fs{display:block;}
+  body.touch.playing #btn-fs{display:none;}
   .kbd{background:#10333d;border:1px solid #2a5a68;border-bottom-width:3px;border-radius:5px;padding:1px 7px;font-family:monospace;font-size:12.5px;}
   table.keys{border-collapse:collapse;margin:8px 0;}
   table.keys td{padding:4.5px 12px 4.5px 0;font-size:14.5px;color:var(--ink-dim);}
@@ -200,6 +205,7 @@
 <div id="toast"></div>
 <div id="watermark">Pingfall: Abyss · by AkmalJ</div>
 <button id="btn-sound" title="Music + ambience on/off (M)">🔊</button>
+<button id="btn-fs" title="Fullscreen">⛶</button>
 
 <!-- TITLE -->
 <div class="screen on" id="scr-title">

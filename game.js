@@ -4533,6 +4533,13 @@ function wire(){
   if (!ui) return;
   document.body.classList.add('touch');
   const $id = id => document.getElementById(id);
+  const fsBtn = $id('btn-fs');
+  if (fsBtn) fsBtn.addEventListener('click', () => {
+    try {
+      if (document.fullscreenElement) { const x = document.exitFullscreen(); if (x && x.catch) x.catch(() => {}); }
+      else { const f = document.documentElement.requestFullscreen(); if (f && f.catch) f.catch(() => {}); }
+    } catch(e) {}
+  });
   const stick = $id('t-stick'), nub = $id('t-nub'), look = $id('t-look');
   let stickId = null, stickCx = 0, stickCy = 0;
   let lookId = null, lookX = 0, lookY = 0;
@@ -4627,6 +4634,7 @@ function wire(){
   setInterval(() => {
     const playing = uiState === 'playing';
     ui.classList.toggle('on', playing);
+    document.body.classList.toggle('playing', playing);
     if (playing && !wasPlaying){
       try { const f = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); if (f && f.catch) f.catch(() => {}); } catch(e) {}
       try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch(e) {}
