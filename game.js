@@ -1091,6 +1091,7 @@ const STR_ZH = {
   'Pause': '暂停', 'Music + ambience on / off': '音乐与氛围音 开 / 关',
   'Collect 💎 crystals for coins. Finish the zone mission to open the gate, then swim through it. Hunter core lights: <span style="color:#59d7ff">blue = dormant</span>, <span style="color:#ffb84d">amber = curious</span>, <span style="color:#ff4d6d">red = hunting you</span>. Run silent and slow to stay unheard. Earn stars: finish (★), +70% crystals (★★), all crystals (★★★). One golden crystal hides in every zone…': '收集 💎 水晶换取金币。完成区域任务以打开大门，然后游过去。猎手核心灯光：<span style="color:#59d7ff">蓝色 = 休眠</span>，<span style="color:#ffb84d">琥珀色 = 好奇</span>，<span style="color:#ff4d6d">红色 = 正在猎杀你</span>。保持安静、慢速航行以免被听见。赢得星星：完成（★）、收集 70% 水晶（★★）、全部水晶（★★★）。每个区域都藏着一颗金色水晶……',
   'PAUSED': '已暂停', 'RESUME': '继续', 'RESTART DIVE': '重新潜入', 'ABANDON DIVE': '放弃潜入',
+  '🧭 New captain? Start with Expedition Zone 1 — it teaches you as you dive.': '🧭 新船长？先玩探险模式第 1 区——它会边潜边教你。',
   'W thrust · Mouse steer · R/C rise/sink · SHIFT boost · SPACE ping · HOLD Click pulse cannon · F torpedo · Q decoy · E EMP · Esc pause': 'W 推进 · 鼠标转向 · R/C 上浮/下沉 · SHIFT 加速 · 空格 声呐 · 按住点击 脉冲炮 · F 鱼雷 · Q 诱饵 · E 电磁脉冲 · Esc 暂停',
   'SELECTED': '已选择', 'SELECT': '选择', 'OWNED': '已拥有', 'BUY': '购买',
   'Speed': '速度', 'Hull': '船体', 'Sonar': '声呐', 'Torpedo dmg': '鱼雷伤害', 'Decoys': '诱饵', 'Torps': '鱼雷', 'Hull integrity': '船体完整度',
