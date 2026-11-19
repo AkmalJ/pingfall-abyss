@@ -87,9 +87,29 @@ const CONFIG = {
       tint:{ water:0x1e0618, fog:0x12030e, accent:0xe05ad0 }, decor:'crystals',
       desc:'Semua bercahaya, tapi Sentry mendengar. Main senyap — bertahanlah.' },
     { id:5, name:'The Abyss Gate', depth:[780,1100], crystalValue:24, crystals:20, escape:150, rec:'Leviathan',
-      mission:{ type:'collect', quota:11 }, hunters:['stalker','skitter','brute','sentry','lurker','skitter'], hunterSpeedMul:1.15, mines:7, jellies:12, fogFar:100,
+      mission:{ type:'collect', quota:11 }, hunters:['stalker','skitter','brute','sentry','lurker','skitter'], hunterSpeedMul:1.15, mines:7, jellies:12, fogFar:100, guardians:1,
       tint:{ water:0x12081f, fog:0x0a0414, accent:0x8a6aff }, decor:'gate',
       desc:'Semua memburu di sini — dan Penjaga Gerbang menunggu di gerbang terakhir.' },
+    { id:6, name:'The Drowned Catacombs', depth:[1100,1450], crystalValue:38, crystals:22, escape:240, rec:'Phantom or Leviathan',
+      mission:{ type:'rescue' },            hunters:['stalker','skitter','lurker','brute'], hunterSpeedMul:1.1, mines:4, jellies:12, fogFar:95,
+      tint:{ water:0x141a18, fog:0x0b100e, accent:0xcfc7a8 }, decor:'catacombs',
+      desc:'Katakombe pilar pucat di balik gerbang. Mini-sub lain hilang di sini — Lurker menunggu di gelapnya.' },
+    { id:7, name:'The Iron Reef', depth:[1450,1850], crystalValue:58, crystals:24, escape:380, rec:'Leviathan',
+      mission:{ type:'nests', nests:4 },    hunters:['stalker','brute','skitter','brute','sentry'], hunterSpeedMul:1.15, mines:12, jellies:13, fogFar:100, decorMul:2,
+      tint:{ water:0x1f100a, fog:0x140906, accent:0xff7a3c }, decor:'wreck',
+      desc:'Wreck Field yang kejam: karang besi, 12 ranjau, 4 sarang. Perang total.' },
+    { id:8, name:'The Silent Dark', depth:[1850,2250], crystalValue:84, crystals:26, escape:560, rec:'Leviathan',
+      mission:{ type:'collect', quota:12 }, hunters:['sentry','lurker','sentry','lurker'], hunterSpeedMul:1.2, mines:5, jellies:14, fogFar:62, decorMul:0.55,
+      tint:{ water:0x0a0614, fog:0x05030c, accent:0x7a5aff }, decor:'crystals',
+      desc:'Nyaris gelap total. Cuma Sentry dan Lurker — dan mereka mendengar segalanya.' },
+    { id:9, name:'The Vent Fields', depth:[2250,2650], crystalValue:124, crystals:28, escape:800, rec:'Leviathan',
+      mission:{ type:'survive', time:90 },  hunters:['brute','stalker','brute','skitter','sentry'], hunterSpeedMul:1.25, mines:6, jellies:15, fogFar:105,
+      tint:{ water:0x200b06, fog:0x150503, accent:0xffa03c }, decor:'vents',
+      desc:'Ladang ventilasi mendidih. Bertahan 90 detik di antara para Brute.' },
+    { id:10, name:'Heart of the Abyss', depth:[2650,3100], crystalValue:200, crystals:30, escape:1200, rec:'Leviathan',
+      mission:{ type:'collect', quota:14 }, hunters:['stalker','skitter','brute','sentry','lurker','brute'], hunterSpeedMul:1.3, mines:9, jellies:16, fogFar:100, guardians:2,
+      tint:{ water:0x160a20, fog:0x0d0516, accent:0xff4d6d }, decor:'gate',
+      desc:'Jantung jurang. Semua memburu, DUA Penjaga Gerbang menunggu. Ini yang terakhir.' },
   ],
   arena: { radius: 235, floorY: -30, ceilY: 38 },
 
@@ -1831,7 +1851,7 @@ const dressing = {
   },
   crystals(g, zone){ // Z4 Magenta Deep — crystal outcrops + glowing flora
     const F = CONFIG.arena.floorY;
-    for (let i = 0; i < 8; i++){
+    for (let i = 0, nC = Math.round(8 * (zone.decorMul || 1)); i < nC; i++){
       const c = makeAsset('crystal');
       c.scale.setScalar(rand(1.8, 3.3));
       const p = randArenaPos(30, 210, 0, 0);
@@ -1842,7 +1862,7 @@ const dressing = {
     }
     const stalkMat = std(0x3a1030, { roughness: 0.8 });
     const headMat = new THREE.MeshStandardMaterial({ color: 0x57104a, emissive: zone.tint.accent, emissiveIntensity: 1.5, roughness: 0.4 });
-    for (let i = 0; i < 18; i++){
+    for (let i = 0, nF = Math.round(18 * (zone.decorMul || 1)); i < nF; i++){
       const p = randArenaPos(35, 205, 0, 0);
       const cl = new THREE.Group(); cl.position.set(p.x, F - 1.5, p.z);
       const n = randi(3, 5);
@@ -1857,6 +1877,39 @@ const dressing = {
       glow.position.y = 1.6; cl.add(glow);
       addGlowPulse(glow, 0.22, rand(1.1, 1.9), 0.1);
       g.add(cl);
+    }
+  },
+  catacombs(g, zone){ // Z6 The Drowned Catacombs — pale broken pillars, no kelp; the dark between them hides things
+    const F = CONFIG.arena.floorY;
+    const bone = std(0x8a8578, { roughness: 0.95, flatShading: true });
+    const bone2 = std(0x6e6a5e, { roughness: 0.95, flatShading: true });
+    for (let i = 0; i < 14; i++){
+      const p = randArenaPos(38, 205, 0, 0);
+      const broken = Math.random() < 0.5;
+      const h = broken ? rand(4, 8) : rand(12, 24);
+      const grp = new THREE.Group(); grp.position.set(p.x, F - 2, p.z);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(4.8, 3, 4.8), bone2); base.position.y = 1; grp.add(base);
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(rand(1.5, 2.1), rand(1.9, 2.5), h, 9), bone);
+      shaft.position.y = 2.4 + h / 2; shaft.rotation.z = rand(-0.05, 0.05); grp.add(shaft);
+      if (!broken){
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1.5, 4.6), bone2);
+        cap.position.y = 2.4 + h + 0.7; cap.rotation.y = rand(0, 0.6); grp.add(cap);
+      } else {
+        const fall = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.9, rand(5, 9), 9), bone);
+        fall.rotation.z = Math.PI / 2 + rand(-0.15, 0.15); fall.rotation.y = rand(0, 3);
+        fall.position.set(rand(4, 7) * (Math.random() < 0.5 ? -1 : 1), 1.9, rand(-3, 3)); grp.add(fall);
+      }
+      g.add(grp);
+    }
+  },
+  vents(g, zone){ // Z9 The Vent Fields — bubble vent columns with a hot glow at the base
+    const F = CONFIG.arena.floorY;
+    for (let i = 0; i < 6; i++){
+      const p = randArenaPos(45, 200, 0, 0);
+      g.add(makeBubbleVent(p.x, F - 1, p.z));
+      const glow = makeGlowSprite(zone.tint.accent, rand(6, 9), 0.4);
+      glow.position.set(p.x, F + 1.2, p.z); g.add(glow);
+      addGlowPulse(glow, 0.25, rand(1.2, 2.0), 0.1);
     }
   },
   gate(g, zone, rb){ // Z5 The Abyss Gate — monumental rock framing the gate at (0, 2, -165)
@@ -2268,8 +2321,9 @@ function startExpedition(zone){
     const h = spawnHunter(gameScene, typeId, pos);
     h.speedMul = zone.hunterSpeedMul;
   }
-  if (zone.id === 5){ // the Gate Guardian waits in front of the final gate
-    const grd = spawnHunter(gameScene, 'brute', new THREE.Vector3(rand(-35, 35), 2, -165 + rand(28, 48)), { hpMul: 3, scaleMul: 1.7 });
+  for (let gi = 0; gi < (zone.guardians || 0); gi++){ // Gate Guardian(s) wait in front of the gate
+    const gx = zone.guardians > 1 ? (gi === 0 ? rand(-40, -14) : rand(14, 40)) : rand(-35, 35);
+    const grd = spawnHunter(gameScene, 'brute', new THREE.Vector3(gx, 2, -165 + rand(28, 48)), { hpMul: 3, scaleMul: 1.7 });
     grd.speedMul = zone.hunterSpeedMul;
   }
   for (let i=0;i<zone.jellies;i++) spawnJelly(gameScene, randArenaPos(25, 210), zone.tint.accent);
