@@ -1624,7 +1624,7 @@ function updateEnvironmentFx(dt){
   // The seabed rings live in their OWN group locked to the player's current
   // floor (not the 50 m shaft snap): the current floor's base plane always
   // has its ring, and no ring ever floats above it as a fake layer.
-  if (envFx.seabed) envFx.seabed.position.y = -survFloorOf(pp.y) * CONFIG.survival.floorDepth;
+  if (envFx.seabed) envFx.seabed.position.y = -(survFloorOf(pp.y) - 1) * CONFIG.survival.floorDepth; // rings are built one floor below the group origin; the -1 rebases the lock to Floor 1-based numbering (Akmal 19 Nov: seabed vanished)
 }
 function smoothstep(a, b, x){ const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
 function tintAsset(root, hex, amt){
