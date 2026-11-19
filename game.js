@@ -293,7 +293,7 @@ const MUSIC_STEP = 1.05; // seconds per step; 16 steps = one 4-bar loop
 const Music = {
   started:false, bus:null, delay:null, tensionBus:null, padGain:null,
   padFilter:null, motifBus:null, cueBus:null, droneFilter:null,
-  step:0, nextStep:0, loop:0, tension:0, nextBeat:0,
+  step:0, nextStep:0, loop:0, tension:0, nextBeat:0, grindGain:null, _scrapeT:0,
   gameMix:0, _wasSuspended:false,
   engGain:null, engFilter:null, engHum:null, engSaw:null, propGain:null, washGain:null, noiseBuf:null, _creakT:90,
   muted(){ return SAVE.music === 0; },
@@ -353,6 +353,11 @@ const Music = {
       const washLp = ctx.createBiquadFilter(); washLp.type = 'lowpass'; washLp.frequency.value = 420;
       this.washGain = ctx.createGain(); this.washGain.gain.value = 0;
       washSrc.connect(washLp); washLp.connect(this.washGain); this.washGain.connect(ctx.destination); washSrc.start();
+      // ---- collapse grind bed: looped noise, lowpassed — gain driven by tensionTick while the plane moves ----
+      this.grindGain = ctx.createGain(); this.grindGain.gain.value = 0;
+      const gf = ctx.createBiquadFilter(); gf.type = 'lowpass'; gf.frequency.value = 250;
+      const gsrc = ctx.createBufferSource(); gsrc.buffer = nb; gsrc.loop = true; gsrc.playbackRate.value = 0.45;
+      gsrc.connect(gf); gf.connect(this.grindGain); this.grindGain.connect(ctx.destination); gsrc.start();
       this._creakT = rand(70, 150);
       this.nextStep = ctx.currentTime + 0.15;
       setInterval(()=> this.tick(), 200);
@@ -568,6 +573,22 @@ const Music = {
       src.start(t, rand(0, 1.2)); src.stop(t + dur + 0.05);
     } catch(e) {}
   },
+  grindScrape(k){ // a rock slab grinding past: bandpass-swept noise, low and slow
+    if (!this.started || !AudioSys.ctx || !this.noiseBuf) return;
+    const ctx = AudioSys.ctx, t = ctx.currentTime;
+    try {
+      const src = ctx.createBufferSource(); src.buffer = this.noiseBuf;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.2;
+      const dur = rand(0.5, 0.95);
+      bp.frequency.setValueAtTime(rand(300, 420), t);
+      bp.frequency.exponentialRampToValueAtTime(rand(70, 110), t + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.028 + 0.075 * k, t + 0.07);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(bp); bp.connect(g); g.connect(ctx.destination);
+      src.start(t, rand(0, 1.2)); src.stop(t + dur + 0.05);
+    } catch(e) {}
+  },
   tensionTick(){
     if (!this.started) return;
     const ctx = AudioSys.ctx;
@@ -590,6 +611,14 @@ const Music = {
       this.thump(ctx.currentTime, 0.34 * this.tension);
       this.thump(ctx.currentTime + 0.17, 0.22 * this.tension);
       this.nextBeat = ctx.currentTime + lerp(1.15, 0.42, this.tension);
+    }
+    // collapse grind (Akmal 19 Nov): while the plane moves, a rock-grinding
+    // bed swells with proximity, with random slab scrapes over it.
+    if (this.grindGain){
+      let gT = 0;
+      if (uiState === 'playing' && G && G.mode === 'survival' && !G.over && G.collapseMoving) gT = 0.025 + 0.085 * (G.collapseProx || 0);
+      try { this.grindGain.gain.setTargetAtTime(this.muted() ? 0 : gT * duckScale, ctx.currentTime, 0.3); } catch(e) {}
+      if (gT > 0 && ctx.currentTime >= (this._scrapeT || 0) && Math.random() < 0.55){ this._scrapeT = ctx.currentTime + rand(0.7, 2.4) * (1.2 - (G.collapseProx || 0)); this.grindScrape(0.3 + 0.7 * (G.collapseProx || 0)); }
     }
   },
   thump(t, vol){
@@ -1265,7 +1294,7 @@ function newG(mode){
     // survival director
     stratum:0, floor:1, maxDepth:0, spawnT:6, spawnInterval:CONFIG.survival.spawnStart,
     nextMinuteAt:60, nextAncientAt:CONFIG.survival.ancientEvery,
-    bandY:0, collapseY:46, collapseMesh:null, collapseStage:0, crushT:0, floorEnterT:0, graceWarned:false, gracePreWarned:false, pendingBoss:null, bossWarnAt:-1, bossSpawnAt:-1, wardenAlive:null, trio:null };
+    bandY:0, collapseY:46, collapseMesh:null, collapseStage:0, crushT:0, floorEnterT:0, graceWarned:false, gracePreWarned:false, collapseMoving:false, collapseProx:0, pendingBoss:null, bossWarnAt:-1, bossSpawnAt:-1, wardenAlive:null, trio:null };
 }
 function removeEntity(root){
   if (gameScene) gameScene.remove(root);
@@ -3558,7 +3587,7 @@ function updateSurvival(dt){
     const holdY = -((G.floor - 1) * 40) + 16; // parked at the entrance: crush band starts above the ceiling, whole floor is safe
     if (G.collapseY < holdY) G.collapseY = holdY; // never crush a boss fight
     if (!G.collapseHeld){ G.collapseHeld = true; toast('🟥 THE COLLAPSE HOLDS — finish this floor\'s guardian!', 3400); }
-    G.crushT = 0;
+    G.crushT = 0; G.collapseMoving = false;
   } else if (G.time >= S.collapseStart){
     if (G.collapseHeld){ G.collapseHeld = false; toast('🟥 THE COLLAPSE RESUMES — DIVE!', 3000); AudioSys.deepBoom(); }
     // Per-floor grace (Akmal 19 Nov): after a floor change the Collapse
@@ -3572,6 +3601,7 @@ function updateSurvival(dt){
     if (gateSealed && !inGrace && !G.graceWarned){ G.graceWarned = true; toast('🟥 THE COLLAPSE IS ON THE MOVE — it creeps down this floor. Finish up and DIVE!', 3800); AudioSys.deepBoom(); }
     let speed = S.collapseBase * 0.65 + G.stratum * 0.2 + G.time / 600; // slowed 19 Nov — gated floors take longer than the old pace assumed
     if (gateSealed && !inGrace) speed = Math.min(speed, 0.35); // the bit-by-bit creep
+    const yBefore = G.collapseY;
     G.collapseY -= speed * dt;
     // Sealed-gate hold (Akmal 19 Nov): while this floor's gate is sealed
     // the Collapse waits ABOVE THE FLOOR'S CEILING (entrance + 16 m, so
@@ -3587,6 +3617,12 @@ function updateSurvival(dt){
         G.crushT = 0;
       } else if (!inGrace) G.gateHeld = false; // creeping — the HUD shows the real distance, not HELD
     } else G.gateHeld = false;
+    // Tremor drive (Akmal 19 Nov): while the plane actually moves the whole
+    // shaft trembles — a proximity-scaled shake; Music reads the same flags
+    // for the rock-grinding layer.
+    G.collapseMoving = (yBefore - G.collapseY) > 0.001;
+    G.collapseProx = clamp(1 - (G.collapseY - pos.y) / 85, 0, 1);
+    if (G.collapseMoving) G.camShake = Math.max(G.camShake, 0.04 + 0.21 * G.collapseProx);
     if (pos.y > G.collapseY - 14){
       G.crushT = (G.crushT || 0) + dt;
       const rate = Math.min(10, 2.5 + G.crushT * 1.2);
