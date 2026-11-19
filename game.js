@@ -9,9 +9,9 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const CONFIG = {
   // ---- assets: models/<name>.glb, placeholder fallback when missing ----
-  assets: ['sub-minnow','sub-barracuda','sub-mule','sub-phantom','sub-leviathan',
+  assets: ['sub-minnow','sub-barracuda','sub-mule','sub-phantom','sub-leviathan','sub-forge',
            'hunter','hunter-brute','hunter-sentry','decoy','crystal','gate','torpedo'],
-  assetSize: { 'sub-minnow':7,'sub-barracuda':8,'sub-mule':8.5,'sub-phantom':8,'sub-leviathan':11,
+  assetSize: { 'sub-minnow':7,'sub-barracuda':8,'sub-mule':8.5,'sub-phantom':8,'sub-leviathan':11,'sub-forge':8,
                'hunter':6.5,'hunter-brute':9,'hunter-sentry':6,'decoy':1.8,'crystal':3.2,'gate':30,'torpedo':2.4 },
   assetYawFix: { 'hunter': -Math.PI / 2 }, // per-model GLB facing fix, applied on the loader wrap so it survives the movement lookAt. 'hunter' was authored head-at-+X (angler lure + jaw at +X, tail fin at -X — verified against the geometry), so -90° puts its face on +Z like the movement/swim code assumes. 'hunter-brute' (head +Z) and 'hunter-sentry' (face +Z) verified correct as authored.
 
@@ -52,6 +52,10 @@ const CONFIG = {
     'leviathan': { name:'Leviathan', asset:'sub-leviathan', role:'Dreadnought', price:1000,
                    speed:16, hull:220, battery:130, sonarMul:1.1,  torpDmg:100, torpCap:10, decoyCap:5,
                    empR:40, empDur:6, noiseMul:1.2, crystalMul:1.0, scale:1.45, tint:0x51628f },
+    'forge':     { name:'FORGE-01',  asset:'sub-forge',     role:'Abyss Forge', price:0,
+                   speed:24, hull:130, battery:120, sonarMul:1.1,  torpDmg:50, torpCap:6, decoyCap:3,
+                   empR:30, empDur:4, noiseMul:0.9, crystalMul:1.1, scale:1.05, tint:0xd6336c,
+                   note:'One-of-one vessel forged by the Lux3D API from a captain\u2019s written description.' },
   },
 
   // ---- hunters: model mapping per DESIGN.md (hunter / hunter-brute / hunter-sentry) ----
@@ -1190,6 +1194,7 @@ function buildHangar(){
       <div class="stat">Hull <b>${s.hull}</b></div>${bar(s.hull, 240)}
       <div class="stat">Sonar <b>×${s.sonarMul}</b></div>${bar(s.sonarMul, 1.3)}
       <div class="stat">Torpedo dmg <b>${s.torpDmg}</b> · Decoys <b>${s.decoyCap}</b> · Torps <b>${s.torpCap}</b></div>
+      ${s.note ? `<div class="stat" style="float:none;color:var(--accent)">${s.note}</div>` : ''}
       ${hullFrac !== undefined && hullFrac < 0.999 ? `<div class="stat" style="color:var(--warn)">Hull integrity <b>${Math.round(hullFrac*100)}%</b></div>` : ''}`;
     const btn = document.createElement('button');
     btn.className = 'btn small' + (owned ? '' : ' buy');
