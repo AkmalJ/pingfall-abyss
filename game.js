@@ -3531,7 +3531,17 @@ function updateSurvival(dt){
     G.collapseStage = 2;
     toast('🟥 THE COLLAPSE HAS BEGUN — it never stops. DIVE!', 3600);
   }
-  if (G.time >= S.collapseStart){
+  // Boss-floor hold (Akmal 19 Nov): the Collapse rides down with you
+  // until a guardian floor (10, 20, 30, ...), then HOLDS while you fight
+  // the boss — and only resumes once you descend past that floor.
+  const onBossFloor = G.floor > 0 && G.floor % 10 === 0;
+  if (onBossFloor && G.time >= S.collapseStart){
+    const holdY = -(G.floor * 40) + 24;
+    if (G.collapseY < holdY) G.collapseY = holdY; // never crush a boss fight
+    if (!G.collapseHeld){ G.collapseHeld = true; toast('🟥 THE COLLAPSE HOLDS — finish this floor\'s guardian!', 3400); }
+    G.crushT = 0;
+  } else if (G.time >= S.collapseStart){
+    if (G.collapseHeld){ G.collapseHeld = false; toast('🟥 THE COLLAPSE RESUMES — DIVE!', 3000); }
     const speed = S.collapseBase + G.stratum * 0.3 + G.time / 420;
     G.collapseY -= speed * dt;
     if (pos.y > G.collapseY - 14){
@@ -3557,6 +3567,7 @@ function updateSurvival(dt){
     else {
       G.colHud.row.style.display = '';
       if (G.time < S.collapseStart){ const s = Math.ceil(S.collapseStart - G.time); G.colHud.txt.textContent = 'IN ' + s + 's'; G.colHud.row.style.color = s <= 10 ? '#ff5566' : '#ffb84d'; }
+      else if (G.collapseHeld){ G.colHud.txt.textContent = 'HELD — BOSS FIGHT'; G.colHud.row.style.color = '#7fe0a8'; }
       else { const d = Math.max(0, Math.round(G.collapseY - pos.y)); G.colHud.txt.textContent = d + ' m ABOVE YOU'; G.colHud.row.style.color = d < 20 ? '#ff3344' : (d < 50 ? '#ffb84d' : '#7fe0a8'); }
     }
   }
@@ -3856,7 +3867,7 @@ function animate(){
   }
   // collapse vignette: red edges close in as the Collapse nears the player
   if (colVigEl){
-    const cTgt = (uiState === 'playing' && G && !G.over && G.mode === 'survival' && player && G.time >= CONFIG.survival.collapseStart - 5)
+    const cTgt = (uiState === 'playing' && G && !G.over && G.mode === 'survival' && player && !G.collapseHeld && G.time >= CONFIG.survival.collapseStart - 5)
       ? Math.max(0, 0.6 * (1 - Math.max(0, G.collapseY - player.group.position.y) / 60)) * (0.8 + 0.2 * Math.sin(performance.now() * 0.01)) : 0;
     colVigCur += (cTgt - colVigCur) * Math.min(1, dt * 5);
     colVigEl.style.opacity = colVigCur.toFixed(3);
