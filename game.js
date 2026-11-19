@@ -209,7 +209,7 @@ const SAVE = (() => {
   const def = { coins:0, subs:['minnow'], sub:'minnow',
     upg:{ sonar:0, battery:0, hull:0 }, stars:{}, golden:{},
     colorsOwned:['teal'], subColor:{}, stock:{ decoy:2, torp:4 },
-    subHull:{}, bestDepth:0, bestTime:0, trioBest:0, music:1 };
+    subHull:{}, bestDepth:0, bestTime:0, trioBest:0, music:1, forged:[], forgeSeq:2 };
   try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && typeof s === 'object') return Object.assign(def, s); } catch(e) {}
   return def;
 })();
@@ -863,6 +863,192 @@ function setAccent(group, hex){
   const mats = group.userData.accentMats || [];
   for (const m of mats){ if (m.color) m.color.setHex(hex); if (m.emissive) m.emissive.setHex(hex); }
   group.traverse(o => { if (o.userData && o.userData.accentMat){ o.userData.accentMat.color.setHex(hex); } });
+}
+
+// ============================ ABYSS FORGE ============================
+// In-game vessel forge: the player describes a submarine, the Lux3D API
+// (api.aholo.ai) generates the 3D model, and it becomes a playable sub.
+// BYOK: the player's own API key is kept only in this browser
+// (localStorage 'pf_forge_key') and sent only to api.aholo.ai. Model
+// blobs live in IndexedDB (localStorage is far too small for ~10 MB GLBs);
+// SAVE.forged holds the metadata + derived stats.
+const FORGE_API = 'https://api.aholo.ai/global';
+const forgeState = { busy:false, status:'', err:false };
+
+function forgeDB(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('pingfall-forge', 1);
+    r.onupgradeneeded = () => { try { r.result.createObjectStore('glbs'); } catch(e) {} };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function forgePut(id, blob){
+  const db = await forgeDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('glbs', 'readwrite');
+    tx.objectStore('glbs').put(blob, id);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+async function forgeGet(id){
+  const db = await forgeDB();
+  return new Promise((res, rej) => {
+    const rq = db.transaction('glbs').objectStore('glbs').get(id);
+    rq.onsuccess = () => res(rq.result || null);
+    rq.onerror = () => rej(rq.error);
+  });
+}
+
+// The description is an engineering spec: keywords trade stats off.
+function forgeStats(prompt){
+  const p = ' ' + String(prompt || '').toLowerCase() + ' ';
+  const d = { speed:24, hull:130, battery:120, sonarMul:1.1, torpDmg:50, torpCap:6, decoyCap:3,
+              empR:30, empDur:4, noiseMul:0.9, crystalMul:1.1, scale:1.05, tint:0xd6336c };
+  const has = re => re.test(p);
+  if (has(/fast|swift|quick|speed|cepat|kencang|laju|高速|快/)) { d.speed += 4; d.hull -= 15; }
+  if (has(/armor|armour|steel|baja|kuat|tank|heavy|giant|besar|raksasa|装甲|重/)) { d.hull += 40; d.speed -= 3; }
+  if (has(/silent|stealth|senyap|hantu|ghost|quiet|隐形|静/)) { d.noiseMul *= 0.6; d.hull -= 10; }
+  if (has(/glow|neon|bright|luminous|terang|cahaya|发光|霓虹/)) { d.sonarMul += 0.2; d.noiseMul += 0.15; }
+  if (has(/battery|endurance|baterai|awet|续航/)) { d.battery += 20; }
+  if (has(/torpedo|weapon|senjata|tempur|war|鱼雷|武器/)) { d.torpDmg = 100; d.torpCap += 2; }
+  if (has(/gold|treasure|emas|harta|黄金|宝藏/)) { d.crystalMul = 1.3; }
+  if (has(/gold|emas|黄金/)) d.tint = 0xb08a2e;
+  else if (has(/blue|biru|蓝/)) d.tint = 0x2e6fb3;
+  else if (has(/green|hijau|绿/)) d.tint = 0x3f9e4d;
+  else if (has(/red|merah|红/)) d.tint = 0xb33a2e;
+  else if (has(/black|hitam|黑/)) d.tint = 0x23272e;
+  else if (has(/purple|ungu|紫/)) d.tint = 0x7a4fd0;
+  else if (has(/silver|perak|银/)) d.tint = 0x9aa7b1;
+  d.speed = clamp(d.speed, 12, 32); d.hull = clamp(d.hull, 80, 240);
+  d.battery = clamp(d.battery, 90, 150); d.sonarMul = clamp(d.sonarMul, 0.8, 1.4);
+  d.noiseMul = clamp(d.noiseMul, 0.4, 1.3);
+  return d;
+}
+
+function registerForgedSub(meta, scene){
+  CONFIG.subs[meta.id] = meta.def;
+  CONFIG.assetSize[meta.def.asset] = 8;
+  if (scene) { try { glbCache[meta.def.asset] = normalizeGLB(scene, 8, meta.def.asset); } catch(e) { glbCache[meta.def.asset] = null; } }
+  if (!SAVE.subs.includes(meta.id)) SAVE.subs.push(meta.id);
+}
+
+async function loadForgedSubs(){
+  try {
+    if (!Array.isArray(SAVE.forged)) SAVE.forged = [];
+    const loader = new GLTFLoader();
+    for (const meta of SAVE.forged){
+      try {
+        registerForgedSub(meta, null);
+        const blob = await forgeGet(meta.id);
+        if (blob){
+          const ab = await blob.arrayBuffer();
+          const g = await loader.parseAsync(ab, '');
+          registerForgedSub(meta, g.scene);
+        }
+      } catch(e) { /* a missing model degrades to the placeholder hull */ }
+    }
+  } catch(e) {}
+}
+
+function forgeSetStatus(txt, isErr){
+  forgeState.status = txt; forgeState.err = !!isErr;
+  const el = $('forge-status');
+  if (el){ el.textContent = txt; el.className = 'forge-status' + (isErr ? ' err' : ''); }
+}
+
+function renderForgePanel(){
+  const keyEl = $('forge-key');
+  if (keyEl && !keyEl.value) { try { keyEl.value = localStorage.getItem('pf_forge_key') || ''; } catch(e) {} }
+  forgeSetStatus(forgeState.status, forgeState.err);
+  updateForgePreview();
+  const list = $('forge-list'); if (!list) return;
+  list.innerHTML = '';
+  if (!SAVE.forged.length){
+    list.innerHTML = '<div class="forge-empty">No forged vessels yet. Your first creation docks here.</div>';
+    return;
+  }
+  for (const meta of SAVE.forged){
+    const it = document.createElement('div'); it.className = 'forge-item';
+    it.innerHTML = `<b>${meta.def.name}</b> · ${meta.def.role}<div class="fp">“${meta.prompt.replace(/</g, '&lt;')}”</div>`;
+    const b = document.createElement('button'); b.className = 'btn small';
+    b.textContent = SAVE.sub === meta.id ? 'SELECTED' : 'SELECT';
+    b.disabled = SAVE.sub === meta.id;
+    b.onclick = () => { SAVE.sub = meta.id; hangarViewId = meta.id; persist(); buildHangar(); refreshHangarPreview(); renderForgePanel(); toast(meta.def.name + ' selected'); };
+    it.appendChild(b);
+    list.appendChild(it);
+  }
+}
+
+function updateForgePreview(){
+  const ta = $('forge-prompt'), pv = $('forge-stats'), cnt = $('forge-count');
+  if (!ta || !pv) return;
+  if (cnt) cnt.textContent = ta.value.length + ' / 200';
+  const d = forgeStats(ta.value);
+  pv.textContent = ta.value.trim().length >= 3
+    ? `Projected spec — Speed ${d.speed} · Hull ${d.hull} · Battery ${d.battery} · Sonar ×${d.sonarMul.toFixed(2)} · Noise ${Math.round(d.noiseMul * 100)}% · Torpedo ${d.torpDmg}`
+    : '';
+}
+
+async function forgeFetch(path, key, opts = {}){
+  const r = await fetch(FORGE_API + path, { ...opts, headers: { 'Authorization': key, 'Content-Type': 'application/json' } });
+  if (!r.ok) throw new Error('Lux3D API HTTP ' + r.status);
+  return r.json();
+}
+
+async function runForge(){
+  if (forgeState.busy) return;
+  const key = ($('forge-key').value || '').trim();
+  const prompt = ($('forge-prompt').value || '').trim();
+  if (!key){ forgeSetStatus('Paste your Lux3D API key first — it never leaves this browser.', true); return; }
+  if (prompt.length < 10){ forgeSetStatus('Describe your vessel in at least a few words (10+ characters).', true); return; }
+  try { localStorage.setItem('pf_forge_key', key); } catch(e) {}
+  forgeState.busy = true;
+  const btn = $('btn-do-forge'); btn.disabled = true; btn.textContent = '⚒ FORGING…';
+  const t0 = Date.now();
+  const elapsed = () => Math.floor((Date.now() - t0) / 1000);
+  try {
+    forgeSetStatus('Contacting the Lux3D forge…');
+    const created = await forgeFetch('/lux3d/v1/generate/text-to-3d/task/create', key, {
+      method: 'POST',
+      body: JSON.stringify({ prompt, style: 'cartoon', version: 'G1-Turbo', faceCount: 50000, outputFormat: ['glb'] }),
+    });
+    if (!created || created.c !== '0' || !created.d) throw new Error((created && created.m) || 'The forge refused the request — check the API key.');
+    const taskId = created.d;
+    forgeSetStatus('The forge is working — this usually takes 3–4 minutes…');
+    let url = null;
+    while (Date.now() - t0 < 12 * 60 * 1000){
+      await new Promise(r => setTimeout(r, 15000));
+      forgeSetStatus(`Forging your vessel… ${elapsed()}s elapsed (usually 180–240s)`);
+      const q = await forgeFetch('/lux3d/v1/generate/task/get?taskid=' + taskId, key);
+      if (q && q.f) throw new Error(q.m || 'The forge failed this vessel.');
+      if (q && q.d && Array.isArray(q.d.outputs) && q.d.outputs.length){ url = q.d.outputs[0].content; break; }
+    }
+    if (!url) throw new Error('The forge is taking unusually long — your credits were charged only on success; try again in a while.');
+    forgeSetStatus('Vessel forged — bringing her into the hangar…');
+    const blob = await (await fetch(url)).blob();
+    const seq = SAVE.forgeSeq || 2;
+    const id = 'forge' + seq;
+    const name = 'FORGE-' + String(seq).padStart(2, '0');
+    const def = { name, asset: 'sub-' + id, role: 'Abyss Forge', price: 0, ...forgeStats(prompt),
+                  note: 'Forged by the Lux3D API from your description: “' + prompt.slice(0, 60) + '”' };
+    const meta = { id, prompt, def };
+    await forgePut(id, blob);
+    const ab = await blob.arrayBuffer();
+    const g = await new GLTFLoader().parseAsync(ab, '');
+    registerForgedSub(meta, g.scene);
+    SAVE.forged.push(meta); SAVE.forgeSeq = seq + 1;
+    SAVE.sub = id; hangarViewId = id;
+    persist(); buildHangar(); refreshHangarPreview(); renderForgePanel();
+    forgeSetStatus(`${name} has docked in your hangar — she is already selected. Dive well, captain.`);
+    toast(name + ' forged and docked');
+  } catch(e) {
+    forgeSetStatus('Forge failed: ' + (e && e.message ? e.message : String(e)), true);
+  } finally {
+    forgeState.busy = false;
+    btn.disabled = false; btn.textContent = '⚒ FORGE MY VESSEL';
+  }
 }
 
 // ============================ SONAR REVEAL ============================
@@ -4214,6 +4400,10 @@ function wire(){
   $('btn-howto-back').onclick = ()=> setUI('title');
   $('btn-zones-back').onclick = ()=> setUI('title');
   $('btn-hangar-back').onclick = ()=> setUI('title');
+  $('btn-forge').onclick = ()=>{ AudioSys.init(); $('forge-overlay').classList.add('on'); renderForgePanel(); };
+  $('btn-forge-close').onclick = ()=> $('forge-overlay').classList.remove('on');
+  $('btn-do-forge').onclick = ()=> runForge();
+  $('forge-prompt').addEventListener('input', updateForgePreview);
   $('btn-resume').onclick = ()=> resumeGame();
   $('btn-restart').onclick = ()=> restartDive();
   $('btn-quit').onclick = ()=>{ if (G) endRun('abandon'); };
@@ -4256,6 +4446,7 @@ function wire(){
   wire();
   refreshCoinLabels();
   await preloadAssets();
+  await loadForgedSubs();
   buildMenuScene();
   buildHangarScene();
   setUI('title');

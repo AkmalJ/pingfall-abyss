@@ -110,6 +110,25 @@
     padding:8px 16px;font-size:13.5px;color:var(--ink-dim);}
   #toast{position:fixed;top:76px;left:50%;transform:translateX(-50%);z-index:20;background:rgba(4,18,24,.9);border:1px solid var(--panel-edge);
          padding:9px 20px;border-radius:9px;font-size:15px;display:none;}
+  .forge-overlay{position:fixed;inset:0;z-index:60;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;
+         background:rgba(2,10,14,.78);padding:26px 14px;}
+  .forge-overlay.on{display:flex;}
+  .forge-panel{max-width:640px;text-align:left;}
+  .forge-blurb{color:var(--ink-dim);font-size:14.5px;line-height:1.5;margin:6px 0 14px;}
+  .forge-label{display:block;font-size:13px;letter-spacing:.08em;color:var(--ink-dim);margin:12px 0 6px;text-transform:uppercase;}
+  .forge-label span{text-transform:none;letter-spacing:0;}
+  .forge-label a{color:var(--accent);}
+  .forge-panel input[type=password], .forge-panel textarea{width:100%;box-sizing:border-box;background:rgba(4,18,24,.85);
+         border:1px solid var(--panel-edge);border-radius:9px;color:var(--ink);padding:10px 12px;font-size:15px;font-family:inherit;resize:vertical;}
+  .forge-stats{font-size:14px;color:var(--accent);min-height:20px;margin:10px 0 4px;}
+  .forge-status{font-size:14.5px;color:var(--ink);min-height:22px;margin:12px 0 2px;line-height:1.5;}
+  .forge-status.err{color:#ff7d92;}
+  .forge-fleet-title{font-size:14px;letter-spacing:.1em;color:var(--ink-dim);margin:20px 0 8px;}
+  .forge-item{border:1px solid var(--panel-edge);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:rgba(4,18,24,.55);}
+  .forge-item b{font-size:15px;}
+  .forge-item .fp{color:var(--ink-dim);font-size:13px;font-style:italic;margin:3px 0 7px;line-height:1.45;}
+  .forge-empty{color:var(--ink-dim);font-size:14px;}
+  #btn-forge-close{margin-top:10px;}
 </style>
 </head>
 <body>
@@ -177,7 +196,7 @@
 <!-- HANGAR -->
 <div class="screen" id="scr-hangar">
   <div class="topbar">
-    <div class="hgroup"><button class="btn small" id="btn-hangar-back">← BACK</button><div class="title">⚓ HANGAR</div></div>
+    <div class="hgroup"><button class="btn small" id="btn-hangar-back">← BACK</button><div class="title">⚓ HANGAR</div><button class="btn small" id="btn-forge">⚒ ABYSS FORGE</button></div>
     <div>🪙 <span class="coins" id="hangar-coins">0</span></div>
   </div>
   <div class="hangar-main">
@@ -193,6 +212,24 @@
       <h2 style="font-size:16px;margin-top:16px">SUPPLIES</h2>
       <div id="supply-list"></div>
     </div>
+  </div>
+</div>
+
+<!-- ABYSS FORGE -->
+<div class="forge-overlay" id="forge-overlay">
+  <div class="panel forge-panel">
+    <h2 style="margin-top:0">⚒ ABYSS FORGE</h2>
+    <p class="forge-blurb">Describe the vessel you dream of. The forge reads your words as an engineering spec — ask for speed and you trade hull for it — then the Lux3D API builds her in about 3–4 minutes. She is one of one: no other captain sails her.</p>
+    <label class="forge-label">Lux3D API key <span>— stays in this browser only · get a free key at <a href="https://labs.aholo.ai/api-keys" target="_blank" rel="noopener">labs.aholo.ai/api-keys</a></span></label>
+    <input type="password" id="forge-key" placeholder="Paste your Lux3D API key" autocomplete="off">
+    <label class="forge-label">Describe your vessel <span id="forge-count">0 / 200</span></label>
+    <textarea id="forge-prompt" maxlength="200" rows="3" placeholder="A swift magenta raider with a glass dome, silent thrusters and a heart of gold..."></textarea>
+    <div class="forge-stats" id="forge-stats"></div>
+    <button class="btn" id="btn-do-forge">⚒ FORGE MY VESSEL</button>
+    <div class="forge-status" id="forge-status"></div>
+    <h3 class="forge-fleet-title">YOUR FORGED FLEET</h3>
+    <div class="forge-list" id="forge-list"></div>
+    <button class="btn small" id="btn-forge-close">← BACK TO HANGAR</button>
   </div>
 </div>
 
