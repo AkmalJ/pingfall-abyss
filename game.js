@@ -2772,6 +2772,23 @@ function drawRadar(){
       ctx.closePath(); ctx.fill();
     }
   }
+  // Hunters (Akmal 19 Nov: show them too): red blips under the same sonar
+  // rule — visible while their ping-reveal lasts or point-blank; a hunter
+  // actively hunting gets a ring, a Warden a bigger dot.
+  for (const h of G.hunters){
+    if (h.dead) continue;
+    const hp = h.group.position, d = hp.distanceTo(pp);
+    const rv = h.group.userData.reveal;
+    let a = 0;
+    if (rv && G.time >= rv.at) a = clamp(1 - (G.time - rv.at) / rv.dur, 0, 1);
+    if (d < 30) a = Math.max(a, 0.9);
+    if (h.state === 'hunt') a = Math.max(a, 0.55);
+    if (a <= 0.02) continue;
+    const q = plot(hp);
+    ctx.beginPath(); ctx.arc(q.x, q.y, h.warden ? 5 : 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,77,109,' + (0.25 + 0.75 * a).toFixed(3) + ')'; ctx.fill();
+    if (h.state === 'hunt'){ ctx.beginPath(); ctx.arc(q.x, q.y, (h.warden ? 8 : 6.5), 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,77,109,' + (0.6 * a).toFixed(3) + ')'; ctx.lineWidth = 1.2; ctx.stroke(); }
+  }
   ctx.beginPath(); ctx.moveTo(C, C - 6); ctx.lineTo(C - 4, C + 5); ctx.lineTo(C + 4, C + 5); ctx.closePath();
   ctx.fillStyle = '#e8fff9'; ctx.fill();
 }
