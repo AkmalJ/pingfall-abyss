@@ -872,7 +872,7 @@ function setAccent(group, hex){
 // (localStorage 'pf_forge_key') and sent only to api.aholo.ai. Model
 // blobs live in IndexedDB (localStorage is far too small for ~10 MB GLBs);
 // SAVE.forged holds the metadata + derived stats.
-const FORGE_API = 'https://api.aholo.ai/global';
+const FORGE_API = 'https://aholo-forge.emaillaptopbaru5.workers.dev/global';
 const forgeState = { busy:false, status:'', err:false };
 
 function forgeDB(){
