@@ -1046,7 +1046,10 @@ async function runForge(){
     forgeSetStatus(`${name} has docked in your hangar — she is already selected. Dive well, captain.`);
     toast(name + ' forged and docked');
   } catch(e) {
-    forgeSetStatus('Forge failed: ' + (e && e.message ? e.message : String(e)), true);
+    const m = e && e.message ? e.message : String(e);
+    forgeSetStatus(/failed to fetch|networkerror/i.test(m)
+      ? 'Forge failed: the browser could not read the Lux3D response. This almost always means the API key was rejected — the API hides its real error from browsers. Re-copy your fresh key from labs.aholo.ai/api-keys and try again.'
+      : 'Forge failed: ' + m, true);
   } finally {
     forgeState.busy = false;
     btn.disabled = false; btn.textContent = '⚒ FORGE MY VESSEL';
