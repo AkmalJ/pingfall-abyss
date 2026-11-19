@@ -3552,9 +3552,23 @@ function updateSurvival(dt){
     if (G.collapseHeld){ G.collapseHeld = false; toast('🟥 THE COLLAPSE RESUMES — DIVE!', 3000); }
     const speed = S.collapseBase + G.stratum * 0.3 + G.time / 420;
     G.collapseY -= speed * dt;
+    // Sealed-gate hold (Akmal 19 Nov): a player pinned at a locked gate by
+    // the pressure clamp CANNOT dive out of the crush zone — the Collapse
+    // drained ~40 HP in ~3 s there and read as a vampire. Now it waits
+    // 20 m above the sealed gate (the pinned player sits 17 m below it,
+    // outside the 14 m crush band) and resumes the moment the gate opens.
+    const gateSealed = !!(G.survGate && G.survGate.floor === G.floor && !G.survGate.open);
+    if (gateSealed){
+      const gateHoldY = -(G.floor * 40) + 20;
+      if (G.collapseY < gateHoldY){
+        G.collapseY = gateHoldY;
+        if (!G.gateHeld){ G.gateHeld = true; toast('🟥 THE COLLAPSE WAITS ABOVE THE SEALED GATE — open it and DIVE!', 3400); }
+        G.crushT = 0;
+      }
+    } else G.gateHeld = false;
     if (pos.y > G.collapseY - 14){
       G.crushT = (G.crushT || 0) + dt;
-      const rate = Math.min(14, 3 + G.crushT * 1.8);
+      const rate = Math.min(10, 2.5 + G.crushT * 1.2);
       player.hull -= rate * dt * player.d.dmgMul;
       G.lastHit = 'The Collapse';
       G.camShake = Math.min(1, G.camShake + dt * 2);
@@ -3576,6 +3590,7 @@ function updateSurvival(dt){
       G.colHud.row.style.display = '';
       if (G.time < S.collapseStart){ const s = Math.ceil(S.collapseStart - G.time); G.colHud.txt.textContent = 'IN ' + s + 's'; G.colHud.row.style.color = s <= 10 ? '#ff5566' : '#ffb84d'; }
       else if (G.collapseHeld){ G.colHud.txt.textContent = 'HELD — BOSS FIGHT'; G.colHud.row.style.color = '#7fe0a8'; }
+      else if (G.gateHeld){ G.colHud.txt.textContent = 'HELD — GATE SEALED'; G.colHud.row.style.color = '#7fe0a8'; }
       else { const d = Math.max(0, Math.round(G.collapseY - pos.y)); G.colHud.txt.textContent = d + ' m ABOVE YOU'; G.colHud.row.style.color = d < 20 ? '#ff3344' : (d < 50 ? '#ffb84d' : '#7fe0a8'); }
     }
   }
