@@ -1063,7 +1063,7 @@ async function runForge(){
 const STR_ZH = {
   '— A B Y S S —<br>Ping to see. Ping and be heard.': '— 深 渊 —<br>以声探路，以声招敌。',
   '▶ EXPEDITION': '▶ 探险', '▼ SURVIVAL': '▼ 生存', 'DIVE — SURVIVAL': '潜入 —— 生存', '⚒ ABYSS FORGE': '⚒ 深渊锻造',
-  'CALM · coins ×0.5 · NO COLLAPSE': '平静 · 金币 ×0.5 · 无坍塌', 'STANDARD · ×1': '标准 · ×1', 'NIGHTMARE · ×2': '噩梦 · ×2',
+  'CALM · ×0.5 · NO COLLAPSE': '平静 · 金币 ×0.5 · 无坍塌', 'STANDARD · ×1 · COLLAPSE': '标准 · ×1 · 有坍塌', 'NIGHTMARE · ×2 · COLLAPSE': '噩梦 · ×2 · 有坍塌',
   '⚓ HANGAR': '⚓ 机库', '? HOW TO PLAY': '? 玩法说明', 'HOW TO PLAY': '玩法说明',
   'Wallet: 🪙 <span class="coins" id="title-coins">0</span> · Best depth <span id="title-depth">—</span> · Best survival <span id="title-time">—</span>': '钱包： 🪙 <span class="coins" id="title-coins">0</span> · 最深深度 <span id="title-depth">—</span> · 最佳生存 <span id="title-time">—</span>',
   'Powered by Aholo Lux3D': '由 Aholo Lux3D 驱动',
