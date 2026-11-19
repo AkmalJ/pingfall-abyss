@@ -209,7 +209,7 @@ const SAVE = (() => {
   const def = { coins:0, subs:['minnow'], sub:'minnow',
     upg:{ sonar:0, battery:0, hull:0 }, stars:{}, golden:{},
     colorsOwned:['teal'], subColor:{}, stock:{ decoy:2, torp:4 },
-    subHull:{}, bestDepth:0, bestTime:0, trioBest:0, music:1, forged:[], forgeSeq:2 };
+    subHull:{}, bestDepth:0, bestTime:0, trioBest:0, music:1, forged:[], forgeSeq:2, lang:'en' };
   try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && typeof s === 'object') return Object.assign(def, s); } catch(e) {}
   return def;
 })();
@@ -966,14 +966,14 @@ function renderForgePanel(){
   const list = $('forge-list'); if (!list) return;
   list.innerHTML = '';
   if (!SAVE.forged.length){
-    list.innerHTML = '<div class="forge-empty">No forged vessels yet. Your first creation docks here.</div>';
+    list.innerHTML = '<div class="forge-empty">' + t('No forged vessels yet. Your first creation docks here.') + '</div>';
     return;
   }
   for (const meta of SAVE.forged){
     const it = document.createElement('div'); it.className = 'forge-item';
     it.innerHTML = `<b>${meta.def.name}</b> · ${meta.def.role}<div class="fp">“${meta.prompt.replace(/</g, '&lt;')}”</div>`;
     const b = document.createElement('button'); b.className = 'btn small';
-    b.textContent = SAVE.sub === meta.id ? 'SELECTED' : 'SELECT';
+    b.textContent = SAVE.sub === meta.id ? t('SELECTED') : t('SELECT');
     b.disabled = SAVE.sub === meta.id;
     b.onclick = () => { SAVE.sub = meta.id; hangarViewId = meta.id; persist(); buildHangar(); refreshHangarPreview(); renderForgePanel(); toast(meta.def.name + ' selected'); };
     it.appendChild(b);
@@ -987,7 +987,9 @@ function updateForgePreview(){
   if (cnt) cnt.textContent = ta.value.length + ' / 200';
   const d = forgeStats(ta.value);
   pv.textContent = ta.value.trim().length >= 3
-    ? `Projected spec — Speed ${d.speed} · Hull ${d.hull} · Battery ${d.battery} · Sonar ×${d.sonarMul.toFixed(2)} · Noise ${Math.round(d.noiseMul * 100)}% · Torpedo ${d.torpDmg}`
+    ? (SAVE.lang === 'zh'
+      ? `预计规格——速度 ${d.speed} · 船体 ${d.hull} · 电池 ${d.battery} · 声呐 ×${d.sonarMul.toFixed(2)} · 噪音 ${Math.round(d.noiseMul * 100)}% · 鱼雷 ${d.torpDmg}`
+      : `Projected spec — Speed ${d.speed} · Hull ${d.hull} · Battery ${d.battery} · Sonar ×${d.sonarMul.toFixed(2)} · Noise ${Math.round(d.noiseMul * 100)}% · Torpedo ${d.torpDmg}`)
     : '';
 }
 
@@ -1049,6 +1051,62 @@ async function runForge(){
     forgeState.busy = false;
     btn.disabled = false; btn.textContent = '⚒ FORGE MY VESSEL';
   }
+}
+
+// ============================ LANGUAGE (EN / 中文) ============================
+// English is the source string; STR_ZH maps it to Simplified Chinese.
+// Static markup carries data-i18n (innerHTML) / data-i18n-ph (placeholder);
+// dynamic strings route through t(). SAVE.lang persists the choice.
+const STR_ZH = {
+  '— A B Y S S —<br>Ping to see. Ping and be heard.': '— 深 渊 —<br>以声探路，以声招敌。',
+  '▶ EXPEDITION': '▶ 探险', '▼ SURVIVAL': '▼ 生存', 'DIVE — SURVIVAL': '潜入 —— 生存',
+  'CALM · coins ×0.5': '平静 · 金币 ×0.5', 'STANDARD · ×1': '标准 · ×1', 'NIGHTMARE · ×2': '噩梦 · ×2',
+  '⚓ HANGAR': '⚓ 机库', '? HOW TO PLAY': '? 玩法说明', 'HOW TO PLAY': '玩法说明',
+  'Wallet: 🪙 <span class="coins" id="title-coins">0</span> · Best depth <span id="title-depth">—</span> · Best survival <span id="title-time">—</span>': '钱包： 🪙 <span class="coins" id="title-coins">0</span> · 最深深度 <span id="title-depth">—</span> · 最佳生存 <span id="title-time">—</span>',
+  'Made by AkmalJ · Powered by Aholo Lux3D': '作者 AkmalJ · 由 Aholo Lux3D 驱动',
+  '📱 Menus, hangar and the forge work by touch — diving itself needs a keyboard & mouse.': '📱 菜单、机库和锻造炉支持触控——但潜入航行需要键盘和鼠标。',
+  'EXPEDITION — SELECT ZONE': '探险 —— 选择区域', '← BACK': '← 返回', '← BACK TO HANGAR': '← 返回机库',
+  'Click a sub to preview it · drag on the water to rotate · scroll to zoom': '点击潜艇预览 · 拖动水面旋转 · 滚轮缩放',
+  'UPGRADES': '升级', 'SUPPLIES': '补给',
+  'Describe the vessel you dream of. The forge reads your words as an engineering spec — ask for speed and you trade hull for it — then the Lux3D API builds her in about 3–4 minutes. She is one of one: no other captain sails her.': '描述你梦想中的潜艇。锻造炉会把你的文字当作工程规格来解读——想要速度，就得用船体来交换——随后 Lux3D API 会在约 3–4 分钟内把她建造出来。她是独一无二的：没有第二位船长能驾驶她。',
+  'Lux3D API key <span>— stays in this browser only · get a free key at <a href="https://labs.aholo.ai/api-keys" target="_blank" rel="noopener">labs.aholo.ai/api-keys</a></span>': 'Lux3D API 密钥 <span>— 只保存在此浏览器中 · 在 <a href="https://labs.aholo.ai/api-keys" target="_blank" rel="noopener">labs.aholo.ai/api-keys</a> 免费获取</span>',
+  'Paste your Lux3D API key': '粘贴你的 Lux3D API 密钥',
+  'Describe your vessel <span id="forge-count">0 / 200</span>': '描述你的潜艇 <span id="forge-count">0 / 200</span>',
+  'A swift magenta raider with a glass dome, silent thrusters and a heart of gold...': '一艘迅捷的品红色突袭艇，配有玻璃穹顶、静音推进器和一颗金子般的心……',
+  '⚒ FORGE MY VESSEL': '⚒ 锻造我的潜艇', 'YOUR FORGED FLEET': '你锻造的舰队',
+  'No forged vessels yet. Your first creation docks here.': '尚无锻造的潜艇。你的第一件作品将停靠在这里。',
+  'The trench is pitch black. Your <b style="color:var(--ink)">sonar ping</b> briefly reveals crystals, hunters and the gate — but every ping is <b style="color:var(--ink)">noise</b>, and the hunters are blind things that hunt by sound. Ping to see. Ping and be heard.': '海沟里漆黑一片。你的<b style="color:var(--ink)">声呐探测</b>能短暂照亮水晶、猎手与大门——但每一次探测都是<b style="color:var(--ink)">噪音</b>，而猎手是靠声音捕猎的盲兽。用声呐看路，也被声呐暴露。',
+  'Thrust forward / back (mouse steers, click water to lock pointer)': '向前 / 向后推进（鼠标转向，点击水面锁定指针）',
+  'Strafe': '侧移', 'Rise / sink (direct vertical thrust)': '上浮 / 下沉（直接垂直推进）',
+  'Turn / pitch (when pointer is not locked)': '转向 / 俯仰（指针未锁定时）',
+  'Sonar ping — reveals the world, 30 s cooldown, makes noise': '声呐探测——揭示周围世界，冷却 30 秒，会发出噪音',
+  'Boost — +70% speed while held, drains the BOOST meter, much louder': '加速——按住时速度 +70%，消耗 BOOST 能量条，噪音大得多',
+  'Pulse cannon — rapid bolts, no ammo but it OVERHEATS (watch the PULSE HEAT bar)': '脉冲炮——快速连发，无需弹药但会过热（注意 PULSE HEAT 条）',
+  'Fire torpedo — heavy damage, limited stock': '发射鱼雷——高伤害，库存有限',
+  'Drop sonar decoy — hunters chase its noise instead of you': '投放声呐诱饵——猎手会追逐它的噪音而不是你',
+  'EMP pulse — disables nearby hunters (cooldown)': '电磁脉冲——使附近猎手瘫痪（有冷却）',
+  'Pause': '暂停', 'Music + ambience on / off': '音乐与氛围音 开 / 关',
+  'Collect 💎 crystals for coins. Finish the zone mission to open the gate, then swim through it. Hunter core lights: <span style="color:#59d7ff">blue = dormant</span>, <span style="color:#ffb84d">amber = curious</span>, <span style="color:#ff4d6d">red = hunting you</span>. Run silent and slow to stay unheard. Earn stars: finish (★), +70% crystals (★★), all crystals (★★★). One golden crystal hides in every zone…': '收集 💎 水晶换取金币。完成区域任务以打开大门，然后游过去。猎手核心灯光：<span style="color:#59d7ff">蓝色 = 休眠</span>，<span style="color:#ffb84d">琥珀色 = 好奇</span>，<span style="color:#ff4d6d">红色 = 正在猎杀你</span>。保持安静、慢速航行以免被听见。赢得星星：完成（★）、收集 70% 水晶（★★）、全部水晶（★★★）。每个区域都藏着一颗金色水晶……',
+  'PAUSED': '已暂停', 'RESUME': '继续', 'RESTART DIVE': '重新潜入', 'ABANDON DIVE': '放弃潜入',
+  'W thrust · Mouse steer · R/C rise/sink · SHIFT boost · SPACE ping · HOLD Click pulse cannon · F torpedo · Q decoy · E EMP · Esc pause': 'W 推进 · 鼠标转向 · R/C 上浮/下沉 · SHIFT 加速 · 空格 声呐 · 按住点击 脉冲炮 · F 鱼雷 · Q 诱饵 · E 电磁脉冲 · Esc 暂停',
+  'SELECTED': '已选择', 'SELECT': '选择', 'OWNED': '已拥有', 'BUY': '购买',
+  'Speed': '速度', 'Hull': '船体', 'Sonar': '声呐', 'Torpedo dmg': '鱼雷伤害', 'Decoys': '诱饵', 'Torps': '鱼雷', 'Hull integrity': '船体完整度',
+  '▼ DIVE': '▼ 潜入', '🔒 LOCKED': '🔒 未解锁',
+  'Mission': '任务', 'Hunters': '猎手', 'Jellyfish': '水母', 'Escape bonus': '逃脱奖励', 'Recommended': '推荐', 'coins each': '金币/颗',
+  'Collect crystals': '收集水晶', 'Rescue the mini-sub': '营救迷你潜艇',
+};
+function t(en){
+  if (SAVE.lang !== 'zh') return en;
+  return STR_ZH[en] || STR_ZH[String(en).replace(/\s+/g, ' ')] || en;
+}
+function applyLang(){
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.innerHTML = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll('.langbtn').forEach(b => b.classList.toggle('sel', b.dataset.lang === (SAVE.lang || 'en')));
+  document.documentElement.lang = SAVE.lang === 'zh' ? 'zh-CN' : 'en';
+  buildHangar(); buildZoneCards();
+  if (typeof updateForgePreview === 'function') updateForgePreview();
+  refreshCoinLabels();
 }
 
 // ============================ SONAR REVEAL ============================
@@ -1337,17 +1395,17 @@ function buildZoneCards(){
     const unlocked = zoneUnlocked(z), stars = SAVE.stars[z.id] || 0;
     const card = document.createElement('div');
     card.className = 'card' + (unlocked ? '' : ' locked');
-    const missionLabel = { collect:'Collect crystals', rescue:'Rescue the mini-sub', nests:'Destroy ' + z.mission.nests + ' nests', survive:'Survive ' + z.mission.time + 's' }[z.mission.type];
-    card.innerHTML = `<h3>${z.id}. ${z.name}</h3><div class="role">${z.depth[0]}–${z.depth[1]} m · 💎 ${z.crystalValue} coins each</div>
+    const missionLabel = { collect:t('Collect crystals'), rescue:t('Rescue the mini-sub'), nests:(SAVE.lang === 'zh' ? '摧毁 ' + z.mission.nests + ' 个巢穴' : 'Destroy ' + z.mission.nests + ' nests'), survive:(SAVE.lang === 'zh' ? '存活 ' + z.mission.time + ' 秒' : 'Survive ' + z.mission.time + 's') }[z.mission.type];
+    card.innerHTML = `<h3>${z.id}. ${z.name}</h3><div class="role">${z.depth[0]}–${z.depth[1]} m · 💎 ${z.crystalValue} ${t('coins each')}</div>
       <div class="stars">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
-      <div class="stat">Mission <b>${missionLabel}</b></div>
-      <div class="stat">Hunters <b>${z.hunters.length}</b></div>
-      <div class="stat">Jellyfish <b>${z.jellies}</b></div>
-      <div class="stat">Escape bonus <b>🪙 ${z.escape}</b></div>
-      <div class="stat">Recommended <b>${z.rec}</b></div>
+      <div class="stat">${t('Mission')} <b>${missionLabel}</b></div>
+      <div class="stat">${t('Hunters')} <b>${z.hunters.length}</b></div>
+      <div class="stat">${t('Jellyfish')} <b>${z.jellies}</b></div>
+      <div class="stat">${t('Escape bonus')} <b>🪙 ${z.escape}</b></div>
+      <div class="stat">${t('Recommended')} <b>${z.rec}</b></div>
       <p class="stat" style="float:none">${z.desc}</p>`;
     const btn = document.createElement('button');
-    btn.className = 'btn small'; btn.textContent = unlocked ? '▼ DIVE' : '🔒 LOCKED';
+    btn.className = 'btn small'; btn.textContent = unlocked ? t('▼ DIVE') : t('🔒 LOCKED');
     btn.disabled = !unlocked;
     btn.onclick = ()=> { AudioSys.init(); startExpedition(z); };
     card.appendChild(btn);
@@ -1375,16 +1433,16 @@ function buildHangar(){
     };
     const hullFrac = SAVE.subHull[id];
     const bar = (v, max) => `<div class="bar"><i style="width:${clamp(v/max*100, 2, 100)}%"></i></div>`;
-    card.innerHTML = `<h3>${s.name}</h3><div class="role">${s.role} · ${owned ? (selected ? 'SELECTED' : 'OWNED') : '🪙 ' + s.price}</div>
-      <div class="stat">Speed</div>${bar(s.speed, 30)}
-      <div class="stat">Hull <b>${s.hull}</b></div>${bar(s.hull, 240)}
-      <div class="stat">Sonar <b>×${s.sonarMul}</b></div>${bar(s.sonarMul, 1.3)}
-      <div class="stat">Torpedo dmg <b>${s.torpDmg}</b> · Decoys <b>${s.decoyCap}</b> · Torps <b>${s.torpCap}</b></div>
+    card.innerHTML = `<h3>${s.name}</h3><div class="role">${s.role} · ${owned ? (selected ? t('SELECTED') : t('OWNED')) : '🪙 ' + s.price}</div>
+      <div class="stat">${t('Speed')}</div>${bar(s.speed, 30)}
+      <div class="stat">${t('Hull')} <b>${s.hull}</b></div>${bar(s.hull, 240)}
+      <div class="stat">${t('Sonar')} <b>×${s.sonarMul}</b></div>${bar(s.sonarMul, 1.3)}
+      <div class="stat">${t('Torpedo dmg')} <b>${s.torpDmg}</b> · ${t('Decoys')} <b>${s.decoyCap}</b> · ${t('Torps')} <b>${s.torpCap}</b></div>
       ${s.note ? `<div class="stat" style="float:none;color:var(--accent)">${s.note}</div>` : ''}
-      ${hullFrac !== undefined && hullFrac < 0.999 ? `<div class="stat" style="color:var(--warn)">Hull integrity <b>${Math.round(hullFrac*100)}%</b></div>` : ''}`;
+      ${hullFrac !== undefined && hullFrac < 0.999 ? `<div class="stat" style="color:var(--warn)">${t('Hull integrity')} <b>${Math.round(hullFrac*100)}%</b></div>` : ''}`;
     const btn = document.createElement('button');
     btn.className = 'btn small' + (owned ? '' : ' buy');
-    btn.textContent = selected ? 'SELECTED' : owned ? 'SELECT' : 'BUY · 🪙 ' + s.price;
+    btn.textContent = selected ? t('SELECTED') : owned ? t('SELECT') : t('BUY') + ' · 🪙 ' + s.price;
     btn.disabled = selected || (!owned && SAVE.coins < s.price);
     btn.onclick = ()=>{
       if (!owned){ SAVE.coins -= s.price; SAVE.subs.push(id); toast(s.name + ' purchased'); }
@@ -4404,6 +4462,7 @@ function wire(){
   $('btn-forge-close').onclick = ()=> $('forge-overlay').classList.remove('on');
   $('btn-do-forge').onclick = ()=> runForge();
   $('forge-prompt').addEventListener('input', updateForgePreview);
+  document.querySelectorAll('.langbtn').forEach(b => { b.onclick = ()=>{ SAVE.lang = b.dataset.lang; persist(); applyLang(); }; });
   $('btn-resume').onclick = ()=> resumeGame();
   $('btn-restart').onclick = ()=> restartDive();
   $('btn-quit').onclick = ()=>{ if (G) endRun('abandon'); };
@@ -4450,5 +4509,7 @@ function wire(){
   buildMenuScene();
   buildHangarScene();
   setUI('title');
+  applyLang();
+  if (('ontouchstart' in window) || (window.matchMedia && matchMedia('(pointer: coarse)').matches)) $('touch-note').style.display = '';
   animate();
 })();

@@ -128,6 +128,12 @@
   .forge-item b{font-size:15px;}
   .forge-item .fp{color:var(--ink-dim);font-size:13px;font-style:italic;margin:3px 0 7px;line-height:1.45;}
   .forge-empty{color:var(--ink-dim);font-size:14px;}
+  .langrow{margin-top:16px;display:flex;gap:8px;justify-content:center;}
+  .langbtn{opacity:.75;}
+  .langbtn.sel{opacity:1;border-color:var(--accent);color:var(--accent);}
+  .credit{margin-top:10px;font-size:12.5px;letter-spacing:.14em;color:var(--ink-dim);text-transform:uppercase;}
+  #watermark{position:fixed;left:10px;bottom:8px;z-index:15;font-size:11px;letter-spacing:.14em;
+         color:rgba(230,245,255,.40);pointer-events:none;text-transform:uppercase;}
   #btn-forge-close{margin-top:10px;}
 </style>
 </head>
@@ -162,41 +168,45 @@
     <div style="margin-top:3px;color:var(--ink-dim)" id="time-txt">00:00</div>
     <div style="margin-top:3px;display:none;font-weight:bold" id="collapse-row">🟥 COLLAPSE <span id="collapse-txt"></span></div>
   </div>
-  <div class="hudbox" id="hud-bc"><span id="ctl-txt">W thrust · Mouse steer · R/C rise/sink · SHIFT boost · SPACE ping · HOLD Click pulse cannon · F torpedo · Q decoy · E EMP · Esc pause</span></div>
+  <div class="hudbox" id="hud-bc"><span id="ctl-txt" data-i18n="W thrust · Mouse steer · R/C rise/sink · SHIFT boost · SPACE ping · HOLD Click pulse cannon · F torpedo · Q decoy · E EMP · Esc pause">W thrust · Mouse steer · R/C rise/sink · SHIFT boost · SPACE ping · HOLD Click pulse cannon · F torpedo · Q decoy · E EMP · Esc pause</span></div>
   <div class="hudbox" id="hud-radar"><canvas id="radar" width="164" height="164"></canvas></div>
   <div id="hint"></div>
 </div>
 <div id="toast"></div>
+<div id="watermark">Pingfall: Abyss · by AkmalJ</div>
 <button id="btn-sound" title="Music + ambience on/off (M)">🔊</button>
 
 <!-- TITLE -->
 <div class="screen on" id="scr-title">
   <h1 class="logo">PINGFALL</h1>
-  <div class="tagline">— A B Y S S —<br>Ping to see. Ping and be heard.</div>
-  <button class="btn" id="btn-expedition">▶ EXPEDITION</button>
-  <button class="btn" id="btn-survival">▼ SURVIVAL</button>
+  <div class="tagline" data-i18n="— A B Y S S —<br>Ping to see. Ping and be heard.">— A B Y S S —<br>Ping to see. Ping and be heard.</div>
+  <button class="btn" id="btn-expedition" data-i18n="▶ EXPEDITION">▶ EXPEDITION</button>
+  <button class="btn" id="btn-survival" data-i18n="▼ SURVIVAL">▼ SURVIVAL</button>
   <div class="diffrow" id="diff-row" style="display:none">
-    <div class="diff" data-diff="calm">CALM · coins ×0.5</div>
-    <div class="diff sel" data-diff="standard">STANDARD · ×1</div>
-    <div class="diff" data-diff="nightmare">NIGHTMARE · ×2</div>
+    <div class="diff" data-diff="calm" data-i18n="CALM · coins ×0.5">CALM · coins ×0.5</div>
+    <div class="diff sel" data-diff="standard" data-i18n="STANDARD · ×1">STANDARD · ×1</div>
+    <div class="diff" data-diff="nightmare" data-i18n="NIGHTMARE · ×2">NIGHTMARE · ×2</div>
   </div>
-  <button class="btn" id="btn-start-survival" style="display:none">DIVE — SURVIVAL</button>
-  <button class="btn" id="btn-hangar">⚓ HANGAR</button>
-  <button class="btn" id="btn-howto">? HOW TO PLAY</button>
-  <div class="note">Wallet: 🪙 <span class="coins" id="title-coins">0</span> · Best depth <span id="title-depth">—</span> · Best survival <span id="title-time">—</span></div>
+  <button class="btn" id="btn-start-survival" style="display:none" data-i18n="DIVE — SURVIVAL">DIVE — SURVIVAL</button>
+  <button class="btn" id="btn-hangar" data-i18n="⚓ HANGAR">⚓ HANGAR</button>
+  <button class="btn" id="btn-howto" data-i18n="? HOW TO PLAY">? HOW TO PLAY</button>
+  <div class="note" data-i18n='Wallet: 🪙 <span class="coins" id="title-coins">0</span> · Best depth <span id="title-depth">—</span> · Best survival <span id="title-time">—</span>'>Wallet: 🪙 <span class="coins" id="title-coins">0</span> · Best depth <span id="title-depth">—</span> · Best survival <span id="title-time">—</span></div>
+  <div class="langrow"><button class="btn small langbtn" data-lang="en">EN</button><button class="btn small langbtn" data-lang="zh">中文</button></div>
+  <div class="credit" data-i18n="Made by AkmalJ · Powered by Aholo Lux3D">Made by AkmalJ · Powered by Aholo Lux3D</div>
+  <div class="note" id="touch-note" style="display:none" data-i18n="📱 Menus, hangar and the forge work by touch — diving itself needs a keyboard & mouse.">📱 Menus, hangar and the forge work by touch — diving itself needs a keyboard & mouse.</div>
 </div>
 
 <!-- ZONE SELECT -->
 <div class="screen" id="scr-zones">
-  <div class="topbar"><div class="title">EXPEDITION — SELECT ZONE</div><div>🪙 <span class="coins" id="zone-coins">0</span></div></div>
+  <div class="topbar"><div class="title" data-i18n="EXPEDITION — SELECT ZONE">EXPEDITION — SELECT ZONE</div><div>🪙 <span class="coins" id="zone-coins">0</span></div></div>
   <div class="grid cards" id="zone-cards" style="max-width:1500px;width:100%"></div>
-  <button class="btn small" id="btn-zones-back">← BACK</button>
+  <button class="btn small" id="btn-zones-back" data-i18n="← BACK">← BACK</button>
 </div>
 
 <!-- HANGAR -->
 <div class="screen" id="scr-hangar">
   <div class="topbar">
-    <div class="hgroup"><button class="btn small" id="btn-hangar-back">← BACK</button><div class="title">⚓ HANGAR</div><button class="btn small" id="btn-forge">⚒ ABYSS FORGE</button></div>
+    <div class="hgroup"><button class="btn small" id="btn-hangar-back" data-i18n="← BACK">← BACK</button><div class="title" data-i18n="⚓ HANGAR">⚓ HANGAR</div><button class="btn small" id="btn-forge">⚒ ABYSS FORGE</button></div>
     <div>🪙 <span class="coins" id="hangar-coins">0</span></div>
   </div>
   <div class="hangar-main">
@@ -204,12 +214,12 @@
       <div class="grid cards" id="sub-cards"></div>
     </div>
     <div class="hangar-stage" id="hangar-stage">
-      <div class="hangar-hint">Click a sub to preview it · drag on the water to rotate · scroll to zoom</div>
+      <div class="hangar-hint" data-i18n="Click a sub to preview it · drag on the water to rotate · scroll to zoom">Click a sub to preview it · drag on the water to rotate · scroll to zoom</div>
     </div>
     <div class="hangar-col panel" id="hangar-shop">
-      <h2 style="font-size:16px">UPGRADES</h2>
+      <h2 style="font-size:16px" data-i18n="UPGRADES">UPGRADES</h2>
       <div id="upgrade-list"></div>
-      <h2 style="font-size:16px;margin-top:16px">SUPPLIES</h2>
+      <h2 style="font-size:16px;margin-top:16px" data-i18n="SUPPLIES">SUPPLIES</h2>
       <div id="supply-list"></div>
     </div>
   </div>
@@ -219,54 +229,56 @@
 <div class="forge-overlay" id="forge-overlay">
   <div class="panel forge-panel">
     <h2 style="margin-top:0">⚒ ABYSS FORGE</h2>
-    <p class="forge-blurb">Describe the vessel you dream of. The forge reads your words as an engineering spec — ask for speed and you trade hull for it — then the Lux3D API builds her in about 3–4 minutes. She is one of one: no other captain sails her.</p>
-    <label class="forge-label">Lux3D API key <span>— stays in this browser only · get a free key at <a href="https://labs.aholo.ai/api-keys" target="_blank" rel="noopener">labs.aholo.ai/api-keys</a></span></label>
-    <input type="password" id="forge-key" placeholder="Paste your Lux3D API key" autocomplete="off">
-    <label class="forge-label">Describe your vessel <span id="forge-count">0 / 200</span></label>
-    <textarea id="forge-prompt" maxlength="200" rows="3" placeholder="A swift magenta raider with a glass dome, silent thrusters and a heart of gold..."></textarea>
+    <p class="forge-blurb" data-i18n="Describe the vessel you dream of. The forge reads your words as an engineering spec — ask for speed and you trade hull for it — then the Lux3D API builds her in about 3–4 minutes. She is one of one: no other captain sails her.">Describe the vessel you dream of. The forge reads your words as an engineering spec — ask for speed and you trade hull for it — then the Lux3D API builds her in about 3–4 minutes. She is one of one: no other captain sails her.</p>
+    <label class="forge-label" data-i18n='Lux3D API key <span>— stays in this browser only · get a free key at <a href="https://labs.aholo.ai/api-keys" target="_blank" rel="noopener">labs.aholo.ai/api-keys</a></span>'>Lux3D API key <span>— stays in this browser only · get a free key at <a href="https://labs.aholo.ai/api-keys" target="_blank" rel="noopener">labs.aholo.ai/api-keys</a></span></label>
+    <input type="password" id="forge-key" placeholder="Paste your Lux3D API key" data-i18n-ph="Paste your Lux3D API key" autocomplete="off">
+    <label class="forge-label" data-i18n='Describe your vessel <span id="forge-count">0 / 200</span>'>Describe your vessel <span id="forge-count">0 / 200</span></label>
+    <textarea id="forge-prompt" maxlength="200" rows="3" placeholder="A swift magenta raider with a glass dome, silent thrusters and a heart of gold..." data-i18n-ph="A swift magenta raider with a glass dome, silent thrusters and a heart of gold..."></textarea>
     <div class="forge-stats" id="forge-stats"></div>
-    <button class="btn" id="btn-do-forge">⚒ FORGE MY VESSEL</button>
+    <button class="btn" id="btn-do-forge" data-i18n="⚒ FORGE MY VESSEL">⚒ FORGE MY VESSEL</button>
     <div class="forge-status" id="forge-status"></div>
-    <h3 class="forge-fleet-title">YOUR FORGED FLEET</h3>
+    <h3 class="forge-fleet-title" data-i18n="YOUR FORGED FLEET">YOUR FORGED FLEET</h3>
     <div class="forge-list" id="forge-list"></div>
-    <button class="btn small" id="btn-forge-close">← BACK TO HANGAR</button>
+    <button class="btn small" id="btn-forge-close" data-i18n="← BACK TO HANGAR">← BACK TO HANGAR</button>
   </div>
 </div>
 
 <!-- HOW TO -->
 <div class="screen" id="scr-howto">
   <div class="panel">
-    <h2>HOW TO PLAY</h2>
-    <p style="color:var(--ink-dim);line-height:1.5">The trench is pitch black. Your <b style="color:var(--ink)">sonar ping</b> briefly reveals crystals, hunters and the gate — but every ping is <b style="color:var(--ink)">noise</b>, and the hunters are blind things that hunt by sound. Ping to see. Ping and be heard.</p>
+    <h2 data-i18n="HOW TO PLAY">HOW TO PLAY</h2>
+    <p style="color:var(--ink-dim);line-height:1.5" data-i18n='The trench is pitch black. Your <b style="color:var(--ink)">sonar ping</b> briefly reveals crystals, hunters and the gate — but every ping is <b style="color:var(--ink)">noise</b>, and the hunters are blind things that hunt by sound. Ping to see. Ping and be heard.'>The trench is pitch black. Your <b style="color:var(--ink)">sonar ping</b> briefly reveals crystals, hunters and the gate — but every ping is <b style="color:var(--ink)">noise</b>, and the hunters are blind things that hunt by sound. Ping to see. Ping and be heard.</p>
     <table class="keys">
-      <tr><td><span class="kbd">W</span>/<span class="kbd">S</span></td><td>Thrust forward / back (mouse steers, click water to lock pointer)</td></tr>
-      <tr><td><span class="kbd">A</span>/<span class="kbd">D</span></td><td>Strafe</td></tr>
-      <tr><td><span class="kbd">R</span>/<span class="kbd">C</span></td><td>Rise / sink (direct vertical thrust)</td></tr>
-      <tr><td><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span></td><td>Turn / pitch (when pointer is not locked)</td></tr>
-      <tr><td><span class="kbd">SPACE</span></td><td>Sonar ping — reveals the world, 30 s cooldown, makes noise</td></tr>
-      <tr><td><span class="kbd">SHIFT</span></td><td>Boost — +70% speed while held, drains the BOOST meter, much louder</td></tr>
-      <tr><td><span class="kbd">Hold Click</span></td><td>Pulse cannon — rapid bolts, no ammo but it OVERHEATS (watch the PULSE HEAT bar)</td></tr>
-      <tr><td><span class="kbd">F</span></td><td>Fire torpedo — heavy damage, limited stock</td></tr>
-      <tr><td><span class="kbd">Q</span></td><td>Drop sonar decoy — hunters chase its noise instead of you</td></tr>
-      <tr><td><span class="kbd">E</span></td><td>EMP pulse — disables nearby hunters (cooldown)</td></tr>
-      <tr><td><span class="kbd">Esc</span> / <span class="kbd">P</span></td><td>Pause</td></tr>
-      <tr><td><span class="kbd">M</span></td><td>Music + ambience on / off</td></tr>
+      <tr><td><span class="kbd">W</span>/<span class="kbd">S</span></td><td data-i18n="Thrust forward / back (mouse steers, click water to lock pointer)">Thrust forward / back (mouse steers, click water to lock pointer)</td></tr>
+      <tr><td><span class="kbd">A</span>/<span class="kbd">D</span></td><td data-i18n="Strafe">Strafe</td></tr>
+      <tr><td><span class="kbd">R</span>/<span class="kbd">C</span></td><td data-i18n="Rise / sink (direct vertical thrust)">Rise / sink (direct vertical thrust)</td></tr>
+      <tr><td><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span></td><td data-i18n="Turn / pitch (when pointer is not locked)">Turn / pitch (when pointer is not locked)</td></tr>
+      <tr><td><span class="kbd">SPACE</span></td><td data-i18n="Sonar ping — reveals the world, 30 s cooldown, makes noise">Sonar ping — reveals the world, 30 s cooldown, makes noise</td></tr>
+      <tr><td><span class="kbd">SHIFT</span></td><td data-i18n="Boost — +70% speed while held, drains the BOOST meter, much louder">Boost — +70% speed while held, drains the BOOST meter, much louder</td></tr>
+      <tr><td><span class="kbd">Hold Click</span></td><td data-i18n="Pulse cannon — rapid bolts, no ammo but it OVERHEATS (watch the PULSE HEAT bar)">Pulse cannon — rapid bolts, no ammo but it OVERHEATS (watch the PULSE HEAT bar)</td></tr>
+      <tr><td><span class="kbd">F</span></td><td data-i18n="Fire torpedo — heavy damage, limited stock">Fire torpedo — heavy damage, limited stock</td></tr>
+      <tr><td><span class="kbd">Q</span></td><td data-i18n="Drop sonar decoy — hunters chase its noise instead of you">Drop sonar decoy — hunters chase its noise instead of you</td></tr>
+      <tr><td><span class="kbd">E</span></td><td data-i18n="EMP pulse — disables nearby hunters (cooldown)">EMP pulse — disables nearby hunters (cooldown)</td></tr>
+      <tr><td><span class="kbd">Esc</span> / <span class="kbd">P</span></td><td data-i18n="Pause">Pause</td></tr>
+      <tr><td><span class="kbd">M</span></td><td data-i18n="Music + ambience on / off">Music + ambience on / off</td></tr>
     </table>
-    <p style="color:var(--ink-dim);line-height:1.5">Collect 💎 crystals for coins. Finish the zone mission to open the gate, then swim through it.
+    <p style="color:var(--ink-dim);line-height:1.5" data-i18n='Collect 💎 crystals for coins. Finish the zone mission to open the gate, then swim through it.
+    Hunter core lights: <span style="color:#59d7ff">blue = dormant</span>, <span style="color:#ffb84d">amber = curious</span>, <span style="color:#ff4d6d">red = hunting you</span>.
+    Run silent and slow to stay unheard. Earn stars: finish (★), +70% crystals (★★), all crystals (★★★). One golden crystal hides in every zone…'>Collect 💎 crystals for coins. Finish the zone mission to open the gate, then swim through it.
     Hunter core lights: <span style="color:#59d7ff">blue = dormant</span>, <span style="color:#ffb84d">amber = curious</span>, <span style="color:#ff4d6d">red = hunting you</span>.
     Run silent and slow to stay unheard. Earn stars: finish (★), +70% crystals (★★), all crystals (★★★). One golden crystal hides in every zone…</p>
-    <button class="btn small" id="btn-howto-back">← BACK</button>
+    <button class="btn small" id="btn-howto-back" data-i18n="← BACK">← BACK</button>
   </div>
 </div>
 
 <!-- PAUSE -->
 <div class="screen" id="scr-pause">
   <div class="panel" style="max-width:420px;text-align:center">
-    <div class="big">PAUSED</div>
+    <div class="big" data-i18n="PAUSED">PAUSED</div>
     <div id="pause-stats" style="color:var(--ink-dim);margin:4px 0 14px;line-height:1.6"></div>
-    <button class="btn" id="btn-resume">RESUME</button>
-    <button class="btn" id="btn-restart">RESTART DIVE</button>
-    <button class="btn" id="btn-quit">ABANDON DIVE</button>
+    <button class="btn" id="btn-resume" data-i18n="RESUME">RESUME</button>
+    <button class="btn" id="btn-restart" data-i18n="RESTART DIVE">RESTART DIVE</button>
+    <button class="btn" id="btn-quit" data-i18n="ABANDON DIVE">ABANDON DIVE</button>
   </div>
 </div>
 
