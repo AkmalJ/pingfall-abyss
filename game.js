@@ -1067,7 +1067,7 @@ const STR_ZH = {
   '⚓ HANGAR': '⚓ 机库', '? HOW TO PLAY': '? 玩法说明', 'HOW TO PLAY': '玩法说明',
   'Wallet: 🪙 <span class="coins" id="title-coins">0</span> · Best depth <span id="title-depth">—</span> · Best survival <span id="title-time">—</span>': '钱包： 🪙 <span class="coins" id="title-coins">0</span> · 最深深度 <span id="title-depth">—</span> · 最佳生存 <span id="title-time">—</span>',
   'Powered by Aholo Lux3D': '由 Aholo Lux3D 驱动',
-  '📱 Menus, hangar and the forge work by touch — diving itself needs a keyboard & mouse.': '📱 菜单、机库和锻造炉支持触控——但潜入航行需要键盘和鼠标。',
+  '📱 Touch controls are on — left stick to steer, drag the right side to look, on-screen buttons to ping, fire and boost.': '📱 触控已开启——左摇杆操舵，拖动右侧视角，屏幕按钮探测、开火与加速。',
   'EXPEDITION — SELECT ZONE': '探险 —— 选择区域', '← BACK': '← 返回', '← BACK TO HANGAR': '← 返回机库',
   'Click a sub to preview it · drag on the water to rotate · scroll to zoom': '点击潜艇预览 · 拖动水面旋转 · 滚轮缩放',
   'UPGRADES': '升级', 'SUPPLIES': '补给',

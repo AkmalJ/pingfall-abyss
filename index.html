@@ -118,7 +118,7 @@
   .forge-label{display:block;font-size:13px;letter-spacing:.08em;color:var(--ink-dim);margin:12px 0 6px;text-transform:uppercase;}
   .forge-label span{text-transform:none;letter-spacing:0;}
   .forge-label a{color:var(--accent);}
-  .forge-panel input[type=password], .forge-panel textarea{width:100%;box-sizing:border-box;background:rgba(4,18,24,.85);
+  #forge-key, .forge-panel textarea{width:100%;box-sizing:border-box;background:rgba(4,18,24,.85);
          border:1px solid var(--panel-edge);border-radius:9px;color:var(--ink);padding:10px 12px;font-size:15px;font-family:inherit;resize:vertical;}
   .forge-stats{font-size:14px;color:var(--accent);min-height:20px;margin:10px 0 4px;}
   .forge-status{font-size:14.5px;color:var(--ink);min-height:22px;margin:12px 0 2px;line-height:1.5;}
@@ -144,15 +144,17 @@
     border:1px solid var(--panel-edge);background:rgba(6,24,30,.35);pointer-events:auto;touch-action:none;}
   #t-nub{position:absolute;left:50%;top:50%;width:52px;height:52px;border-radius:50%;
     background:rgba(46,230,200,.35);border:1px solid var(--panel-edge);transform:translate(-50%,-50%);pointer-events:none;}
-  #t-rise{left:36px;bottom:232px;width:50px;height:50px;font-size:14px;}
-  #t-sink{left:98px;bottom:232px;width:50px;height:50px;font-size:14px;}
-  #t-boost{right:22px;top:34%;}
-  #t-ping{right:22px;top:47%;width:74px;height:74px;font-size:13px;border-color:var(--accent);}
-  #t-fire{right:22px;top:63%;}
-  #t-emp{right:108px;top:40%;}
-  #t-torp{right:108px;top:53%;}
-  #t-decoy{right:108px;top:66%;}
-  #t-pause{top:12px;right:12px;width:44px;height:44px;font-size:14px;}
+  body.touch #hud-radar{transform:scale(.62);transform-origin:bottom right;}
+  body.touch #hud-bc{display:none;}
+  #t-rise{left:162px;bottom:138px;width:50px;height:50px;font-size:14px;}
+  #t-sink{left:162px;bottom:80px;width:50px;height:50px;font-size:14px;}
+  #t-boost{right:186px;bottom:224px;}
+  #t-ping{right:14px;bottom:132px;width:74px;height:74px;font-size:13px;border-color:var(--accent);}
+  #t-fire{right:100px;bottom:130px;}
+  #t-emp{right:186px;bottom:150px;}
+  #t-torp{right:100px;bottom:192px;}
+  #t-decoy{right:272px;bottom:150px;}
+  #t-pause{bottom:12px;left:50%;margin-left:-22px;width:44px;height:44px;font-size:14px;}
   #watermark{position:fixed;left:10px;bottom:8px;z-index:15;font-size:11px;letter-spacing:.14em;
          color:rgba(230,245,255,.40);pointer-events:none;text-transform:uppercase;}
   #btn-forge-close{margin-top:10px;}
@@ -216,7 +218,7 @@
   <div class="note" data-i18n='Wallet: 🪙 <span class="coins" id="title-coins">0</span> · Best depth <span id="title-depth">—</span> · Best survival <span id="title-time">—</span>'>Wallet: 🪙 <span class="coins" id="title-coins">0</span> · Best depth <span id="title-depth">—</span> · Best survival <span id="title-time">—</span></div>
   <div class="langrow"><button class="btn small langbtn" data-lang="en">EN</button><button class="btn small langbtn" data-lang="zh">中文</button></div>
   <div class="credit" data-i18n="Powered by Aholo Lux3D">Powered by Aholo Lux3D</div>
-  <div class="note" id="touch-note" style="display:none" data-i18n="📱 Menus, hangar and the forge work by touch — diving itself needs a keyboard & mouse.">📱 Menus, hangar and the forge work by touch — diving itself needs a keyboard & mouse.</div>
+  <div class="note" id="touch-note" style="display:none" data-i18n="📱 Touch controls are on — left stick to steer, drag the right side to look, on-screen buttons to ping, fire and boost.">📱 Touch controls are on — left stick to steer, drag the right side to look, on-screen buttons to ping, fire and boost.</div>
 </div>
 
 <!-- ZONE SELECT -->
