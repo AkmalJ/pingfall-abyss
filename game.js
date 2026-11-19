@@ -3328,12 +3328,14 @@ function updateSurvivalGate(){
     toast('⚓ DESCENT GATE OPEN — dive through the ring!');
     updateObjective();
   }
-  if (!sg.open){
+  {
     const boundY = -G.floor * S.floorDepth, pp = player.group.position;
-    if (pp.y < boundY + 3){
+    const gp = sg.gate.group.position;
+    const inHole = sg.open && Math.hypot(pp.x - gp.x, pp.z - gp.z) < 9.2; // the dive-through hole in the seabed disc
+    if (!inHole && pp.y < boundY + 3){
       pp.y = boundY + 3;
       if (player.vel.y < 0) player.vel.y = Math.abs(player.vel.y) * 0.25; // pressure current shoves you back up
-      if (G.time > G.gateWarnT){
+      if (!sg.open && G.time > G.gateWarnT){
         G.gateWarnT = G.time + 3;
         toast(survIsBossFloor(sg.floor)
           ? (survIsTrioFloor(sg.floor) ? '⛔ GATE LOCKED — the Three Guardians guard this floor' : '⛔ GATE LOCKED — the Warden guards this floor. Kill it!')
