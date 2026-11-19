@@ -81,7 +81,7 @@ const CONFIG = {
     { id:3, name:'The Wreck Field', depth:[320,520], crystalValue:8, crystals:16, escape:40, rec:'Barracuda',
       mission:{ type:'nests', nests:3 },    hunters:['stalker','skitter','brute','skitter'], hunterSpeedMul:1.0, mines:8, jellies:9, decorMul:1.7,
       tint:{ water:0x1c1410, fog:0x120c08, accent:0xe08a4d }, decor:'wreck',
-      desc:'Medan perang kuburan kapal: ranjau, sarang hunter, bangkai buat berlindung.' },
+      desc:'Medan perang kuburan kapal: ranjau, sarang hunter yang dijaga penjaga, bangkai buat berlindung.' },
     { id:4, name:'Magenta Deep',  depth:[520,780],   crystalValue:14, crystals:18, escape:75, rec:'Phantom',
       mission:{ type:'survive', time:75 },  hunters:['stalker','skitter','sentry','brute','sentry','stalker'], hunterSpeedMul:1.1, mines:6, jellies:10, fogFar:92,
       tint:{ water:0x1e0618, fog:0x12030e, accent:0xe05ad0 }, decor:'crystals',
@@ -97,7 +97,7 @@ const CONFIG = {
     { id:7, name:'The Iron Reef', depth:[1450,1850], crystalValue:58, crystals:24, escape:380, rec:'Leviathan',
       mission:{ type:'nests', nests:4 },    hunters:['stalker','brute','skitter','brute','sentry'], hunterSpeedMul:1.26, mines:12, jellies:13, fogFar:100, decorMul:2,
       tint:{ water:0x1f100a, fog:0x140906, accent:0xff7a3c }, decor:'wreck',
-      desc:'Wreck Field yang kejam: karang besi, 12 ranjau, 4 sarang. Perang total.' },
+      desc:'Wreck Field yang kejam: karang besi, 12 ranjau, 4 sarang yang dijaga penjaga. Perang total.' },
     { id:8, name:'The Silent Dark', depth:[1850,2250], crystalValue:84, crystals:26, escape:560, rec:'Leviathan',
       mission:{ type:'collect', quota:12 }, hunters:['sentry','lurker','sentry','lurker'], hunterSpeedMul:1.31, mines:5, jellies:14, fogFar:62, decorMul:0.55,
       tint:{ water:0x0a0614, fog:0x05030c, accent:0x7a5aff }, decor:'crystals',
@@ -2328,7 +2328,16 @@ function startExpedition(zone){
   }
   for (let i=0;i<zone.jellies;i++) spawnJelly(gameScene, randArenaPos(25, 210), zone.tint.accent);
   for (let i=0;i<zone.mines;i++) spawnMine(gameScene, randArenaPos(45, 195));
-  if (zone.mission.type === 'nests') for (let i=0;i<zone.mission.nests;i++) spawnNest(gameScene, randArenaPos(95, 185, -14, 18));
+  if (zone.mission.type === 'nests') for (let i=0;i<zone.mission.nests;i++){
+    const np = randArenaPos(95, 185, -14, 18);
+    const nest = spawnNest(gameScene, np);
+    for (const gt of ['skitter','stalker']){ // every nest keeps a guard pack at its post
+      const gp = np.clone(); gp.x += rand(-13, 13); gp.z += rand(-13, 13);
+      gp.y = clamp(np.y + rand(-4, 6), CONFIG.arena.floorY + 4, CONFIG.arena.ceilY - 4);
+      const gh = spawnHunter(gameScene, gt, gp);
+      gh.guardNest = nest; gh.speedMul = zone.hunterSpeedMul;
+    }
+  }
   if (zone.mission.type === 'rescue'){
     const sg = makeAsset('sub-minnow'); sg.scale.setScalar(0.8);
     sg.position.copy(randArenaPos(140, 175, -10, 12));
@@ -2993,6 +3002,7 @@ function damageTarget(c, dmg){
   if (c.kind === 'nest'){
     const n = c.ref;
     n.hp -= dmg; explosionFx(n.group.position, 2.5); AudioSys.hit();
+    for (const gh of G.hunters) if (!gh.dead && gh.guardNest === n){ gh.awareness = Math.max(gh.awareness, 0.9); gh.lastNoise.copy(player.group.position); gh.targetKind = 'player'; } // damaging a nest calls its guards
     const rvN = n.group.userData.reveal; if (rvN) rvN.at = G.time; // a hit nest flares bright — visible hit feedback
     if (!n.hpBar) n.hpBar = makeNestBar(n);
     n.hpBar.fg.scale.x = n.hpBar.w * clamp(n.hp / n.maxHp, 0, 1);
@@ -3099,6 +3109,12 @@ function updatePulseCannon(dt){
 
 // ============================ HUNTER AI ============================
 function pickPatrolPoint(h){
+  if (h.guardNest && !h.guardNest.dead){ // nest guards hold their post while the nest lives
+    const p = h.guardNest.group.position.clone();
+    p.x += rand(-11, 11); p.z += rand(-11, 11); p.y += rand(-3, 3);
+    if (G.mode === 'expedition') p.y = clamp(p.y, CONFIG.arena.floorY + 3, CONFIG.arena.ceilY - 3);
+    return p;
+  }
   const cands = [];
   for (const c of G.crystals) if (!c.taken) cands.push(c.group.position);
   if (G.mode === 'expedition' && G.gate) cands.push(G.gate.pos);
