@@ -1062,7 +1062,7 @@ async function runForge(){
 // dynamic strings route through t(). SAVE.lang persists the choice.
 const STR_ZH = {
   '— A B Y S S —<br>Ping to see. Ping and be heard.': '— 深 渊 —<br>以声探路，以声招敌。',
-  '▶ EXPEDITION': '▶ 探险', '▼ SURVIVAL': '▼ 生存', 'DIVE — SURVIVAL': '潜入 —— 生存',
+  '▶ EXPEDITION': '▶ 探险', '▼ SURVIVAL': '▼ 生存', 'DIVE — SURVIVAL': '潜入 —— 生存', '⚒ ABYSS FORGE': '⚒ 深渊锻造',
   'CALM · coins ×0.5': '平静 · 金币 ×0.5', 'STANDARD · ×1': '标准 · ×1', 'NIGHTMARE · ×2': '噩梦 · ×2',
   '⚓ HANGAR': '⚓ 机库', '? HOW TO PLAY': '? 玩法说明', 'HOW TO PLAY': '玩法说明',
   'Wallet: 🪙 <span class="coins" id="title-coins">0</span> · Best depth <span id="title-depth">—</span> · Best survival <span id="title-time">—</span>': '钱包： 🪙 <span class="coins" id="title-coins">0</span> · 最深深度 <span id="title-depth">—</span> · 最佳生存 <span id="title-time">—</span>',
@@ -4463,6 +4463,7 @@ function wire(){
   $('btn-zones-back').onclick = ()=> setUI('title');
   $('btn-hangar-back').onclick = ()=> setUI('title');
   $('btn-forge').onclick = ()=>{ AudioSys.init(); $('forge-overlay').classList.add('on'); renderForgePanel(); };
+  $('btn-forge-title').onclick = ()=>{ AudioSys.init(); $('forge-overlay').classList.add('on'); renderForgePanel(); };
   $('btn-forge-close').onclick = ()=> $('forge-overlay').classList.remove('on');
   $('btn-do-forge').onclick = ()=> runForge();
   $('forge-prompt').addEventListener('input', updateForgePreview);
