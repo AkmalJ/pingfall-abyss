@@ -23,7 +23,7 @@ const CONFIG = {
   decoy: { life: 12, radius: 95, pulse: 0.6 },
 
   // ---- pulse cannon (hold LMB): rapid bolts, OVERHEAT instead of ammo ----
-  pulse: { dmg: 0.05, skitterMul: 2, rate: 8, range: 32, speed: 88,
+  pulse: { dmg: 5, skitterMul: 2, rate: 8, range: 32, speed: 88,
            heatRate: 100 / 2.2, ventRate: 100 / 1.6, unlockAt: 40 },
 
   // ---- hunter senses (DESIGN.md "Hunter senses & aggression") ----
@@ -37,29 +37,29 @@ const CONFIG = {
   // ---- submarines ----
   subs: {
     'minnow':    { name:'Minnow',    asset:'sub-minnow',    role:'Scout',       price:0,
-                   speed:26, hull:100, battery:100, sonarMul:1.25, torpDmg:1, torpCap:4, decoyCap:2,
+                   speed:26, hull:100, battery:100, sonarMul:1.25, torpDmg:50, torpCap:4, decoyCap:2,
                    empR:26, empDur:4, noiseMul:1.0, crystalMul:1.0, scale:1.0,  tint:0x2e8f86 },
     'barracuda': { name:'Barracuda', asset:'sub-barracuda', role:'Assault',     price:150,
-                   speed:24, hull:120, battery:100, sonarMul:1.0,  torpDmg:2, torpCap:6, decoyCap:3,
+                   speed:24, hull:120, battery:100, sonarMul:1.0,  torpDmg:100, torpCap:6, decoyCap:3,
                    empR:28, empDur:4, noiseMul:1.0, crystalMul:1.0, scale:1.05, tint:0xb35a2e },
     'mule':      { name:'Mule',      asset:'sub-mule',      role:'Hauler',      price:250,
-                   speed:18, hull:140, battery:120, sonarMul:0.95, torpDmg:1, torpCap:5, decoyCap:3,
+                   speed:18, hull:140, battery:120, sonarMul:0.95, torpDmg:50, torpCap:5, decoyCap:3,
                    empR:26, empDur:4, noiseMul:1.1, crystalMul:1.5, scale:1.18, tint:0xb08a2e },
     'phantom':   { name:'Phantom',   asset:'sub-phantom',   role:'Stealth',     price:600,
-                   speed:25, hull:100, battery:110, sonarMul:1.05, torpDmg:1, torpCap:4, decoyCap:3,
+                   speed:25, hull:100, battery:110, sonarMul:1.05, torpDmg:50, torpCap:4, decoyCap:3,
                    empR:30, empDur:5, noiseMul:0.45, crystalMul:1.0, scale:1.05, tint:0x3a3f4a },
     'leviathan': { name:'Leviathan', asset:'sub-leviathan', role:'Dreadnought', price:1000,
-                   speed:16, hull:220, battery:130, sonarMul:1.1,  torpDmg:2, torpCap:10, decoyCap:5,
+                   speed:16, hull:220, battery:130, sonarMul:1.1,  torpDmg:100, torpCap:10, decoyCap:5,
                    empR:40, empDur:6, noiseMul:1.2, crystalMul:1.0, scale:1.45, tint:0x51628f },
   },
 
   // ---- hunters: model mapping per DESIGN.md (hunter / hunter-brute / hunter-sentry) ----
   hunters: {
-    stalker: { model:'hunter',        modelScale:1.0,  speed:13,   hp:1, hearing:1.0,  dmg:12, tint:0x3d5a68, hitR:3.4 },
-    skitter: { model:'hunter',        modelScale:0.6,  speed:21,   hp:1, hearing:0.9,  dmg:8,  tint:0x5b7d8a, hitR:2.4, erratic:1 },
-    brute:   { model:'hunter-brute',  modelScale:1.15, speed:9.5,  hp:3, hearing:1.1,  dmg:25, tint:0x6b5138, hitR:4.6 },
-    sentry:  { model:'hunter-sentry', modelScale:1.0,  speed:0,    hp:2, hearing:1.2,  dmg:10, tint:0x54447a, hitR:3.2, pingRadius:58, pingEvery:6 },
-    lurker:  { model:'hunter',        modelScale:0.9,  speed:17,   hp:2, hearing:0,    dmg:18, tint:0x0b0d13, hitR:3.0, dash:27, dark:true },
+    stalker: { model:'hunter',        modelScale:1.0,  speed:15.5, hp:50, hearing:1.0,  dmg:12, tint:0x3d5a68, hitR:3.4 },
+    skitter: { model:'hunter',        modelScale:0.6,  speed:21,   hp:50, hearing:0.9,  dmg:8,  tint:0x5b7d8a, hitR:2.4, erratic:1 },
+    brute:   { model:'hunter-brute',  modelScale:1.15, speed:12.5, hp:150, hearing:1.1,  dmg:25, tint:0x6b5138, hitR:4.6 },
+    sentry:  { model:'hunter-sentry', modelScale:1.0,  speed:0,    hp:100, hearing:1.2,  dmg:10, tint:0x54447a, hitR:3.2, pingRadius:58, pingEvery:6 },
+    lurker:  { model:'hunter',        modelScale:0.9,  speed:17,   hp:100, hearing:0,    dmg:18, tint:0x0b0d13, hitR:3.0, dash:27, dark:true },
   },
   hunterStates: { dormant:{ core:0x2e7fd9 }, curious:{ core:0xffb84d }, hunting:{ core:0xff4d6d } },
 
@@ -130,7 +130,7 @@ const CONFIG = {
     strata: [
       { name:'Stratum I — Sunlit Grave',  tint:0x06222e, accent:0x35e0c8 },
       { name:'Stratum II — Kelp Dark',    tint:0x0a2e1e, accent:0x59e08a },
-      { name:'Stratum III — Rust Belt',   tint:0x1c1410, accent:0xe08a4d },
+      { name:'Stratum III — The Furnace', tint:0x200c05, accent:0xff7a2a },
       { name:'Stratum IV — Magenta Deep', tint:0x2a0a24, accent:0xe05ad0 },
       { name:'Stratum V — The Violet',    tint:0x12081f, accent:0x8a6aff },
       { name:'Stratum VI — True Abyss',   tint:0x050508, accent:0x5a7aff },
@@ -144,7 +144,7 @@ const CONFIG = {
 
   // ---- Stratum Warden (survival boss at floors 10/20/30...) ----
   warden: {
-    scale: 1.6, hp: 8, hpPerStratum: 2, speedMul: 1.05, dmg: 25,
+    scale: 1.6, hp: 100, hpPerStratum: 50, speedMul: 1.15, dmg: 25,
     modifiers: ['armored','shrieker','splitter','swift'],
     modInfo: {
       armored:  { name:'ARMORED',  desc:'Plating halves all damage it takes.' },
@@ -159,9 +159,9 @@ const CONFIG = {
   // ---- Boss Trio "The Three Guardians" (floors 50/100/150... replace the Warden) ----
   trio: {
     everyFloors: 50, cycleMul: 1.35, warnBefore: 4,
-    alpha: { scale:1.5, hp:6,  speed:19, dmg:16 },   // hunter.glb — fast, persistent
-    wall:  { scale:1.7, hp:14, speed:9,  dmg:25 },   // hunter-brute.glb — tank
-    eye:   { scale:1.2, hp:5,  dmg:10, pingRadius:70, pingEvery:4.5 }, // hunter-sentry.glb — exposes you
+    alpha: { scale:1.5, hp:300, speed:19, dmg:16 },   // hunter.glb — fast, persistent
+    wall:  { scale:1.7, hp:700, speed:9,  dmg:25 },   // hunter-brute.glb — tank
+    eye:   { scale:1.2, hp:250, dmg:10, pingRadius:70, pingEvery:4.5 }, // hunter-sentry.glb — exposes you
     coinBase: 150, coinPerCycle: 75,
   },
 
@@ -1264,7 +1264,7 @@ function newG(mode){
     // survival director
     stratum:0, floor:0, maxDepth:0, spawnT:6, spawnInterval:CONFIG.survival.spawnStart,
     nextMinuteAt:60, nextAncientAt:CONFIG.survival.ancientEvery,
-    bandY:0, collapseY:46, collapseMesh:null, pendingBoss:null, bossWarnAt:-1, bossSpawnAt:-1, wardenAlive:null, trio:null };
+    bandY:0, collapseY:46, collapseMesh:null, collapseStage:0, crushT:0, pendingBoss:null, bossWarnAt:-1, bossSpawnAt:-1, wardenAlive:null, trio:null };
 }
 function removeEntity(root){
   if (gameScene) gameScene.remove(root);
@@ -1407,6 +1407,7 @@ function spawnCrystal(scene, pos, value, golden = false){
   group.position.copy(pos);
   scene.add(group);
   registerReveal(group, { min: 0.04, prox: 24 });
+  group.userData.isCrystal = true;
   if (golden) tintRevealEntries(group, 0xffc93a, 0.85);
   // Dimmer, sonar-driven halo (was scale 8/11 at full opacity — visible across the
   // arena). Now the halo's brightness is driven by the ping-reveal factor in the
@@ -1464,7 +1465,7 @@ function spawnNest(scene, pos){
   scene.add(group);
   registerReveal(group, { min: 0.05 });
   tintRevealEntries(group, 0x4a7a3d, 0.55);
-  const n = { group, hp: 3, dead: false };
+  const n = { group, hp: 150, dead: false };
   G.nests.push(n);
   return n;
 }
@@ -2264,7 +2265,18 @@ const FLOOR_THEMES = [
   { id: 'ruins', name: 'SUNKEN RUINS', icon: '🏛' },
   { id: 'vent', name: 'VENT FIELD', icon: '🌋' },
 ];
-const floorTheme = f => FLOOR_THEMES[((f % FLOOR_THEMES.length) + FLOOR_THEMES.length) % FLOOR_THEMES.length];
+// Stratum mood (Akmal 19 Nov): every 10 floors the whole mood turns — each
+// stratum has a SIGNATURE theme dominating its floors, so a stratum reads
+// as one place (the Furnace burns vent-orange, Kelp Dark drowns in weed),
+// with the other themes visiting. Deterministic per floor, so the
+// floor-enter toast names the theme the band actually generated.
+const STRATUM_SIGNATURE = ['wreck', 'kelp', 'vent', 'ruins', 'wreck', 'vent'];
+function floorTheme(f){
+  const s = Math.floor(f / 10) % STRATUM_SIGNATURE.length;
+  const h = Math.abs(Math.sin(f * 127.1 + s * 311.7) * 43758.5453) % 1;
+  if (h < 0.55) return FLOOR_THEMES.find(t => t.id === STRATUM_SIGNATURE[s]);
+  return FLOOR_THEMES[Math.floor(h * FLOOR_THEMES.length) % FLOOR_THEMES.length];
+}
 const BAND_WRECK_MAT = std(0x2c3840, { roughness: 0.75, metalness: 0.5, flatShading: true });
 const BAND_STONE_MAT = std(0x4a4a52, { roughness: 0.9, flatShading: true });
 const BAND_LAVA_MAT = std(0x1c1712, { roughness: 1, flatShading: true });
@@ -2437,6 +2449,94 @@ function ensureBands(){
     }
     gameScene.add(registerReveal(sg, { min: 0.2, prox: 30 }));
     G.rocks.push(sg);
+    // Ground cover (Akmal 19 Nov: the floor of each floor read as empty):
+    // a dense carpet hugging the band's base plane — coral fans, grass
+    // tufts, scattered rock — so the seabed feels alive wherever the
+    // player skims it. Instanced coral keeps it cheap.
+    const gg = new THREE.Group(); gg.position.set(0, G.bandY, 0);
+    {
+      const geos = coralGeos(), dummy = new THREE.Object3D(), col = new THREE.Color();
+      const palette = FLORA_PALETTE.map(h => new THREE.Color(h).lerp(new THREE.Color(0x7fe0ff), 0.35));
+      const gfill = (im, n, sMin, sMax) => {
+        for (let i = 0; i < n; i++){
+          const a = rand(0, Math.PI * 2), r = 14 + Math.sqrt(Math.random()) * 128;
+          dummy.position.set(Math.cos(a) * r, rand(0.2, 1.4), Math.sin(a) * r);
+          dummy.rotation.set(rand(-0.2, 0.2), rand(0, Math.PI * 2), rand(-0.2, 0.2));
+          const s = rand(sMin, sMax); dummy.scale.set(s, s, s); dummy.updateMatrix();
+          im.setMatrixAt(i, dummy.matrix);
+          col.copy(pick(palette)).offsetHSL(0, 0, rand(-0.06, 0.06)); im.setColorAt(i, col);
+        }
+        im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+        gg.add(im);
+      };
+      gfill(coralMesh(geos.fan, 18, 0x2a7a8c, 0.3), 18, 0.8, 1.7);
+      gfill(coralMesh(geos.stag, 18, 0x2a7a8c, 0.36), 18, 0.8, 1.7);
+      gfill(coralMesh(geos.brain, 12, 0x2a7a8c, 0.22), 12, 0.8, 1.5);
+      for (let i = 0; i < 16; i++){ // grass tufts rooted on the floor
+        const a = rand(0, Math.PI * 2), r = 14 + Math.sqrt(Math.random()) * 128;
+        addKelp(gg, BAND_KELP_MAT, Math.cos(a) * r, 0, Math.sin(a) * r, 0x7fe0ff);
+      }
+      for (let i = 0; i < 16; i++){ // loose floor rocks
+        const a = rand(0, Math.PI * 2), r = 14 + Math.sqrt(Math.random()) * 126, rad = rand(0.8, 3.2);
+        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(rad, 0), BAND_ROCK_MAT);
+        rock.position.set(Math.cos(a) * r, rad * 0.35, Math.sin(a) * r);
+        rock.rotation.set(rand(0, 3), rand(0, 3), rand(0, 3));
+        gg.add(rock);
+        if (rad >= 2.4) addCollider(rock.position.x, G.bandY + rock.position.y, rock.position.z, rad);
+      }
+    }
+    gameScene.add(registerReveal(gg, { min: 0.45, prox: 60 }));
+    G.rocks.push(gg);
+    // Feature set piece — ONE per band, rotating for variety (Akmal 19 Nov):
+    // a swim-through rock arch, the ribcage of some giant dead thing, or a
+    // spire cluster. Its anchor joins bandRocks BEFORE the crystals sample,
+    // so quota items never spawn inside it.
+    {
+      const fa = rand(0, Math.PI * 2), fr = rand(34, 108);
+      const fx = Math.cos(fa) * fr, fz = Math.sin(fa) * fr, frot = rand(0, Math.PI * 2);
+      const fg = new THREE.Group(); fg.position.set(fx, G.bandY, fz); fg.rotation.y = frot;
+      const roll = Math.random();
+      if (roll < 0.34){ // rock arch / tunnel mouth
+        const arch = new THREE.Mesh(new THREE.TorusGeometry(7.5, 2.3, 7, 14, Math.PI), BAND_ROCK_MAT);
+        arch.position.y = 0.5; fg.add(arch);
+        for (let i = 0; i < 3; i++){
+          const br = new THREE.Mesh(new THREE.DodecahedronGeometry(rand(1.6, 3), 0), BAND_ROCK_MAT);
+          br.position.set(rand(-9, 9), rand(0, 1), rand(-3, 3)); fg.add(br);
+        }
+        const c = Math.cos(frot), s = Math.sin(frot);
+        addCollider(fx + c * 7.5, G.bandY + 2, fz - s * 7.5, 2.6);
+        addCollider(fx - c * 7.5, G.bandY + 2, fz + s * 7.5, 2.6);
+      } else if (roll < 0.67){ // giant skeleton — spine, rib arcs, skull
+        const bone = std(0xcfc7ae, { roughness: 0.9, flatShading: true });
+        const nV = 9;
+        for (let i = 0; i < nV; i++){
+          const t = i / (nV - 1), vx = (t - 0.5) * 24, vy = 1.1 + Math.sin(t * Math.PI) * 1.6;
+          const vert = new THREE.Mesh(new THREE.BoxGeometry(2.1, 1.7, 2.1), bone);
+          vert.position.set(vx, vy, 0); vert.rotation.y = rand(-0.2, 0.2); fg.add(vert);
+          if (i > 0 && i < nV - 1){
+            const rib = new THREE.Mesh(new THREE.TorusGeometry(4.6 - Math.abs(t - 0.5) * 3.4, 0.34, 6, 12, Math.PI), bone);
+            rib.position.set(vx, vy + 0.4, 0); rib.rotation.y = Math.PI / 2;
+            fg.add(rib);
+          }
+        }
+        const skull = new THREE.Mesh(new THREE.SphereGeometry(2.9, 10, 8), bone);
+        skull.scale.set(1, 0.82, 1.45); skull.position.set(15.5, 1.9, 0); fg.add(skull);
+        const jaw = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.7, 2.2), bone);
+        jaw.position.set(16.8, 0.45, 0); jaw.rotation.z = -0.16; fg.add(jaw);
+        const eye = glowBall(0.5, 0x6ff5e2); eye.position.set(14.6, 2.2, 1.6); fg.add(eye);
+        addCollider(fx, G.bandY + 2, fz, 4);
+      } else { // spire cluster
+        for (let i = 0, n = randi(3, 5); i < n; i++){
+          const h = rand(6, 15), sp = new THREE.Mesh(new THREE.ConeGeometry(rand(1.8, 3.2), h, 7), BAND_ROCK_MAT);
+          sp.position.set(rand(-8, 8), h / 2 - 0.5, rand(-8, 8)); sp.rotation.z = rand(-0.09, 0.09);
+          fg.add(sp);
+        }
+        addCollider(fx, G.bandY + 2, fz, 4);
+      }
+      gameScene.add(registerReveal(fg, { min: 0.35, prox: 55 }));
+      G.rocks.push(fg);
+      bandRocks.push({ x: fx, y: G.bandY + 3, z: fz, rad: 10 });
+    }
     const clearOfRocks = (p, margin) => { for (const rk of bandRocks){ const dx = p.x - rk.x, dy = p.y - rk.y, dz = p.z - rk.z; if (dx*dx + dy*dy + dz*dz < (rk.rad + margin) * (rk.rad + margin)) return false; } return true; };
     const guarded = [];
     for (let i=0;i<3;i++){
@@ -2599,7 +2699,7 @@ function doPing(){
   for (const r of revealables){
     const rv = r.userData.reveal; if (!rv) continue;
     const d = r.position.distanceTo(pp);
-    if (d < R * 1.3){ rv.at = G.time + d / CONFIG.sonar.waveSpeed; rv.dur = CONFIG.sonar.revealDur * (r.userData.isHunter ? player.d.echoMul : 1); }
+    if (d < R * 1.3){ rv.at = G.time + d / CONFIG.sonar.waveSpeed; rv.dur = CONFIG.sonar.revealDur * (r.userData.isHunter ? player.d.echoMul : (r.userData.isCrystal ? 1.6 : 1)); }
   }
   for (const h of G.hunters){
     if (h.dead || h.type.hearing <= 0) continue;
@@ -2701,6 +2801,18 @@ function killHunter(h){
   if (h.warden) onWardenKilled(h);
   if (h.trioRole) onTrioMemberDown(h);
 }
+function makeHpBar(h){
+  const w = h.maxHp >= 250 ? 8.5 : 6.5;
+  const grp = new THREE.Group();
+  const bg = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x0a0f14, depthTest: false, transparent: true, opacity: 0.75 }));
+  bg.scale.set(w + 0.5, 1.05, 1); bg.renderOrder = 998;
+  const fg = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x53ff7a, depthTest: false, transparent: true, opacity: 0.95 }));
+  fg.center.set(0, 0.5); fg.scale.set(w, 0.62, 1); fg.position.x = -w / 2; fg.renderOrder = 999;
+  grp.add(bg); grp.add(fg);
+  grp.position.y = h.type.hitR + 3.4;
+  h.group.add(grp);
+  h.hpBar = { fg, w };
+}
 function damageTarget(c, dmg){
   if (c.kind === 'nest'){
     c.ref.hp -= dmg; explosionFx(c.ref.group.position, 2.5); AudioSys.hit();
@@ -2710,7 +2822,11 @@ function damageTarget(c, dmg){
   const h = c.ref;
   if (h.maxHp === undefined) h.maxHp = h.hp;
   h.hp -= dmg * h.dmgTakenMul;
-  explosionFx(h.group.position, 2.5);
+  explosionFx(h.group.position, 2.5 * Math.max(1, h.group.scale.x));
+  // Visible HP (Akmal 19 Nov): a bar over every hunter once it is hurt, so
+  // every hit visibly counts — green draining to red.
+  if (!h.hpBar && !h.dead) makeHpBar(h);
+  if (h.hpBar){ const f = clamp(h.hp / h.maxHp, 0, 1); h.hpBar.fg.scale.x = Math.max(0.01, h.hpBar.w * f); h.hpBar.fg.material.color.setHSL(0.33 * f, 0.95, 0.55); }
   if (h.hp <= 0 && !h.dead) killHunter(h);
   else {
     AudioSys.hit();
@@ -3250,12 +3366,17 @@ function spawnSurvivalHunter(){
   const typeId = pick(pool);
   const pp = player.group.position;
   const a = rand(0, Math.PI * 2), r = rand(28, S.shaftRadius - 28);
-  const pos = new THREE.Vector3(Math.cos(a) * r, pp.y - rand(35, 75), Math.sin(a) * r);
-  return spawnHunter(gameScene, typeId, pos, { speedMul: G.diff.hunterMul * clamp(1 + st * 0.04, 1, 1.35) });
+  // Spawn mix (Akmal 19 Nov: the dive felt empty — hunters only ever rose
+  // from far below): ~45% arrive near the player's own level, the rest below.
+  const yOff = Math.random() < 0.45 ? rand(-12, 8) : -rand(35, 75);
+  const pos = new THREE.Vector3(Math.cos(a) * r, pp.y + yOff, Math.sin(a) * r);
+  // HP grows +25 per stratum (Akmal 19 Nov's scaling table); speed as before.
+  const baseHp = CONFIG.hunters[typeId].hp;
+  return spawnHunter(gameScene, typeId, pos, { speedMul: G.diff.hunterMul * clamp(1 + st * 0.04, 1, 1.35), hpMul: (baseHp + 25 * st) / baseHp });
 }
 function spawnAncient(){
   const pos = player.group.position.clone(); pos.y -= 60; pos.x += rand(-40, 40); pos.z += rand(-40, 40);
-  const h = spawnHunter(gameScene, 'brute', pos, { aggro: true, ancient: true, scaleMul: 2.0, hpMul: 4, speedMul: 1.05 * G.diff.hunterMul });
+  const h = spawnHunter(gameScene, 'brute', pos, { aggro: true, ancient: true, scaleMul: 2.0, hpMul: 4, speedMul: 1.3 * G.diff.hunterMul });
   h.dmgAbs = 30;
   toast('🐋 THE ANCIENT ONE rises… kill it, or outlast it.', 4200);
 }
@@ -3350,6 +3471,7 @@ function updateSurvival(dt){
   const newFloor = Math.floor(depth / S.floorDepth);
   if (newFloor > G.floor){
     G.floor = newFloor;
+    G.spawnInterval = Math.max(S.spawnMin, G.spawnInterval * 0.94); // deeper floors breed denser hunters
     G.floorCrystals = 0; // the descent-gate quota counts crystals collected ON the new floor
     const newStratum = Math.floor(newFloor / S.floorsPerStratum);
     if (newStratum > G.stratum) onStratumCross(newStratum, newFloor);
@@ -3361,6 +3483,22 @@ function updateSurvival(dt){
     // floors — the stratum/boss announcement owns those).
     if (newFloor % 10 !== 0){ const th = floorTheme(newFloor); toast(th.icon + ' FLOOR ' + newFloor + ' — ' + th.name, 1900); }
     updateObjective();
+  }
+  // Depth darkness gradient (Akmal 19 Nov): bright shallows, crushing dark
+  // below — the water darkens ~1% per floor and the fog closes in, lerped
+  // per-frame so the transition is a slow fade, never a jump.
+  {
+    const st = S.strata[G.stratum % S.strata.length];
+    const dark = Math.min(1, G.floor / 55);
+    if (!G.darkCol) G.darkCol = new THREE.Color();
+    G.darkCol.setHex(st.tint).multiplyScalar(1 - 0.62 * dark);
+    const lerpK = Math.min(1, dt * 1.6);
+    gameScene.background.lerp(G.darkCol, lerpK);
+    gameScene.fog.color.lerp(G.darkCol, lerpK);
+    const farT = Math.max(44, FOG_FAR - G.stratum * 5 - dark * 36);
+    const nearT = Math.max(13, FOG_NEAR - G.stratum - dark * 11);
+    gameScene.fog.far += (farT - gameScene.fog.far) * lerpK;
+    gameScene.fog.near += (nearT - gameScene.fog.near) * lerpK;
   }
   updateSurvivalGate();
   G.spawnT -= dt;
@@ -3379,19 +3517,49 @@ function updateSurvival(dt){
       if (pb.kind === 'warden') spawnWarden(pb.stratum); else spawnTrio(pb.milestone);
     }
   }
-  // The Collapse
+  // The Collapse — telegraphed (Akmal 19 Nov: he died to it twice without
+  // ever seeing it coming): HUD countdown + headroom readout, warnings at
+  // T-10s and at the start, a wall that flares as it nears, the red
+  // vignette in animate(), and a damage RAMP — gentle at first, lethal
+  // only if the player lingers in the crush zone.
+  if (!G.collapseStage && G.time >= S.collapseStart - 10){
+    G.collapseStage = 1;
+    toast('⚠ THE DEEP STIRS — THE COLLAPSE BEGINS IN 10s. KEEP DIVING!', 3600);
+    AudioSys.tone(98, 0.8, 'sawtooth', 0.09, 65);
+  }
+  if (G.collapseStage === 1 && G.time >= S.collapseStart){
+    G.collapseStage = 2;
+    toast('🟥 THE COLLAPSE HAS BEGUN — it never stops. DIVE!', 3600);
+  }
   if (G.time >= S.collapseStart){
     const speed = S.collapseBase + G.stratum * 0.3 + G.time / 420;
     G.collapseY -= speed * dt;
     if (pos.y > G.collapseY - 14){
-      player.hull -= 10 * dt * player.d.dmgMul;
+      G.crushT = (G.crushT || 0) + dt;
+      const rate = Math.min(14, 3 + G.crushT * 1.8);
+      player.hull -= rate * dt * player.d.dmgMul;
       G.lastHit = 'The Collapse';
       G.camShake = Math.min(1, G.camShake + dt * 2);
       if ((G.collapseWarnT || 0) < G.time){ G.collapseWarnT = G.time + 3; toast('🟥 THE COLLAPSE IS CRUSHING YOU — DIVE!'); }
       if (player.hull <= 0){ player.hull = 0; endRun('dead'); return; }
+    } else G.crushT = 0;
+    if (G.collapseMesh){
+      const w = G.collapseMesh.children[0];
+      if (w){ const d = G.collapseY - pos.y; w.material.opacity = d < 50 ? 0.13 + 0.27 * (1 - Math.max(0, d) / 50) : 0.13; }
     }
   }
   G.collapseMesh.position.y = G.collapseY;
+  // Collapse HUD readout: countdown over the last 30 s before it starts,
+  // headroom in metres once it is moving.
+  if (!G.colHud) G.colHud = { row: document.getElementById('collapse-row'), txt: document.getElementById('collapse-txt') };
+  if (G.colHud.row){
+    if (G.time < S.collapseStart - 30) G.colHud.row.style.display = 'none';
+    else {
+      G.colHud.row.style.display = '';
+      if (G.time < S.collapseStart){ const s = Math.ceil(S.collapseStart - G.time); G.colHud.txt.textContent = 'IN ' + s + 's'; G.colHud.row.style.color = s <= 10 ? '#ff5566' : '#ffb84d'; }
+      else { const d = Math.max(0, Math.round(G.collapseY - pos.y)); G.colHud.txt.textContent = d + ' m ABOVE YOU'; G.colHud.row.style.color = d < 20 ? '#ff3344' : (d < 50 ? '#ffb84d' : '#7fe0a8'); }
+    }
+  }
   if (G.particles) G.particles.position.y = pos.y;
   if (G.motes) G.motes.position.y = pos.y;
   updateDrifters(dt, G.time);
@@ -3559,6 +3727,10 @@ function updatePlayer(dt){
         const d = Math.sqrt(d2), push = (rr - d) / d;
         g.position.x += dx * push; g.position.y += dy * push; g.position.z += dz * push;
         const vn = (p.vel.x * dx + p.vel.y * dy + p.vel.z * dz) / d;
+        if (vn < -12 && G.time > (G.impactCdAt || 0)){ // hard rock impact costs hull (Akmal 19 Nov)
+          G.impactCdAt = G.time + 0.7;
+          damagePlayer(Math.min(15, (-vn - 11) * 1.05), new THREE.Vector3(c.x, c.y, c.z), 'Rock impact');
+        }
         if (vn < 0){ p.vel.x -= vn * dx / d; p.vel.y -= vn * dy / d; p.vel.z -= vn * dz / d; }
       }
     }
@@ -3577,6 +3749,10 @@ function updatePlayer(dt){
         const d = Math.sqrt(d2), push = (rr - d) / d;
         g.position.x += dx * push; g.position.y += dy * push; g.position.z += dz * push;
         const vn = (p.vel.x * dx + p.vel.y * dy + p.vel.z * dz) / d;
+        if (vn < -12 && G.time > (G.impactCdAt || 0)){ // hard rock impact costs hull (Akmal 19 Nov)
+          G.impactCdAt = G.time + 0.7;
+          damagePlayer(Math.min(15, (-vn - 11) * 1.05), new THREE.Vector3(c.x, cy, c.z), 'Rock impact');
+        }
         if (vn < 0){ p.vel.x -= vn * dx / d; p.vel.y -= vn * dy / d; p.vel.z -= vn * dz / d; }
       }
     }
@@ -3665,6 +3841,8 @@ const clock = new THREE.Clock();
 let menuT = 0, objT = 0;
 let huntVigCur = 0;
 const huntVigEl = document.getElementById('huntvig');
+let colVigCur = 0;
+const colVigEl = document.getElementById('colvig');
 function animate(){
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -3675,6 +3853,13 @@ function animate(){
       ? (0.08 + 0.17 * Music.tension) * (0.78 + 0.22 * Math.sin(performance.now() * 0.007)) : 0;
     huntVigCur += (vigTgt - huntVigCur) * Math.min(1, dt * 5);
     huntVigEl.style.opacity = huntVigCur.toFixed(3);
+  }
+  // collapse vignette: red edges close in as the Collapse nears the player
+  if (colVigEl){
+    const cTgt = (uiState === 'playing' && G && !G.over && G.mode === 'survival' && player && G.time >= CONFIG.survival.collapseStart - 5)
+      ? Math.max(0, 0.6 * (1 - Math.max(0, G.collapseY - player.group.position.y) / 60)) * (0.8 + 0.2 * Math.sin(performance.now() * 0.01)) : 0;
+    colVigCur += (cTgt - colVigCur) * Math.min(1, dt * 5);
+    colVigEl.style.opacity = colVigCur.toFixed(3);
   }
   if (uiState === 'playing' && G && !G.over){
     G.time += dt;

@@ -71,6 +71,7 @@
   #flash{position:fixed;inset:0;background:radial-gradient(ellipse at center,transparent 55%,rgba(255,30,60,.55));opacity:0;pointer-events:none;z-index:6;transition:opacity .1s;}
   #vig{position:fixed;inset:0;background:radial-gradient(ellipse at center,transparent 52%,rgba(0,0,0,.55));pointer-events:none;z-index:4;}
   #huntvig{position:fixed;inset:0;background:radial-gradient(ellipse at center,transparent 55%,rgba(255,30,60,.5));opacity:0;pointer-events:none;z-index:6;}
+  #colvig{position:fixed;inset:0;background:radial-gradient(ellipse at center,transparent 48%,rgba(255,20,30,.62));opacity:0;pointer-events:none;z-index:6;}
   #btn-sound{position:fixed;right:14px;bottom:14px;z-index:30;width:44px;height:44px;border-radius:50%;border:1px solid var(--panel-edge);
              background:rgba(6,24,30,.8);color:var(--ink);font-size:19px;cursor:pointer;line-height:1;}
   #btn-sound:hover{background:rgba(46,230,200,.2);}
@@ -111,6 +112,7 @@
 <div id="vig"></div>
 <div id="flash"></div>
 <div id="huntvig"></div>
+<div id="colvig"></div>
 
 <!-- HUD -->
 <div id="hud">
@@ -133,6 +135,7 @@
     <div style="margin-top:3px">💎 <span id="crys-txt">0/0</span> &nbsp; 🐚 <span id="torp-txt">0</span> &nbsp; 📡 <span id="decoy-txt">0</span></div>
     <div style="margin-top:3px" id="emp-txt">EMP READY [E]</div>
     <div style="margin-top:3px;color:var(--ink-dim)" id="time-txt">00:00</div>
+    <div style="margin-top:3px;display:none;font-weight:bold" id="collapse-row">🟥 COLLAPSE <span id="collapse-txt"></span></div>
   </div>
   <div class="hudbox" id="hud-bc"><span id="ctl-txt">W thrust · Mouse steer · R/C rise/sink · SPACE ping · HOLD Click pulse cannon · F torpedo · Q decoy · E EMP · Esc pause</span></div>
   <div id="hint"></div>
