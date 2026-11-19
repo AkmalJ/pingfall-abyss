@@ -1471,12 +1471,17 @@ function spawnNest(scene, pos){
 }
 function spawnCache(scene, pos){
   const group = new THREE.Group();
-  const box = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.8, 2.6), std(0x6b5a26, { metalness: 0.4 }));
-  group.add(box);
-  const lid = glowBall(0.4, 0xffd76a); lid.position.y = 1.15; group.add(lid);
+  // A giant spinning gold coin instead of the old box (Akmal 19 Nov: round
+  // like a real coin, with a spin effect) — upright cylinder, gold rim and a
+  // raised emblem through both faces; the cache loop spins + bobs the group.
+  const coin = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.45, 28), std(0xffc93a, { metalness: 0.85, roughness: 0.3, emissiveIntensity: 0.35 }));
+  coin.rotation.x = Math.PI / 2; group.add(coin);
+  group.add(new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.14, 10, 36), std(0xd9962b, { metalness: 0.9, roughness: 0.35, emissiveIntensity: 0.25 })));
+  const emb = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.52, 24), std(0xd9962b, { metalness: 0.8, roughness: 0.4, emissiveIntensity: 0.3 }));
+  emb.rotation.x = Math.PI / 2; group.add(emb);
   group.position.copy(pos); scene.add(group);
   registerReveal(group, { min: 0.1, prox: 26 });
-  const c = { group, taken: false, phase: rand(0, Math.PI*2) };
+  const c = { group, taken: false, phase: rand(0, Math.PI*2), baseY: pos.y };
   if (G && G.mode === 'survival') c.floor = survFloorOf(pos.y);
   if (!G.caches) G.caches = [];
   G.caches.push(c);
@@ -3138,7 +3143,8 @@ function updateHazardsAndPickups(dt){
   if (G.caches) for (const c of G.caches){
     if (c.taken) continue;
     if (G.mode === 'survival' && c.floor !== undefined && c.floor !== G.floor) continue; // other floors' caches are not here
-    c.group.rotation.y += dt * 0.6;
+    c.group.rotation.y += dt * 2.4; // coin spin (Akmal 19 Nov)
+    if (c.baseY !== undefined) c.group.position.y = c.baseY + Math.sin(G.time * 1.4 + c.phase) * 0.5;
     if (c.group.position.distanceTo(pp) < 5){
       c.taken = true; removeEntity(c.group);
       const v = Math.round(rand(CONFIG.econ.cacheMin, CONFIG.econ.cacheMax) * (G.diff ? G.diff.mult : 1));
