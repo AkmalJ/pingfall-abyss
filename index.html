@@ -35,6 +35,10 @@
   h2{letter-spacing:3px;margin-bottom:12px;}
   .grid{display:grid;gap:12px;}
   .cards{grid-template-columns:repeat(auto-fit,minmax(230px,1fr));}
+  #zone-cards{grid-template-columns:repeat(5,1fr);}
+  @media (max-width:1250px){ #zone-cards{grid-template-columns:repeat(3,1fr);} }
+  @media (max-width:760px){ #zone-cards{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:480px){ #zone-cards{grid-template-columns:1fr;} }
   .card{background:rgba(10,34,42,.85);border:1px solid rgba(46,230,200,.22);border-radius:11px;padding:14px;}
   .card.sel{border-color:var(--accent);box-shadow:0 0 14px rgba(46,230,200,.4);}
   .card.viewing{outline:1px dashed rgba(46,230,200,.55);outline-offset:-1px;}
@@ -166,7 +170,7 @@
 <!-- ZONE SELECT -->
 <div class="screen" id="scr-zones">
   <div class="topbar"><div class="title">EXPEDITION — SELECT ZONE</div><div>🪙 <span class="coins" id="zone-coins">0</span></div></div>
-  <div class="grid cards" id="zone-cards" style="max-width:860px;width:100%"></div>
+  <div class="grid cards" id="zone-cards" style="max-width:1500px;width:100%"></div>
   <button class="btn small" id="btn-zones-back">← BACK</button>
 </div>
 
