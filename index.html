@@ -132,6 +132,27 @@
   .langbtn{opacity:.75;}
   .langbtn.sel{opacity:1;border-color:var(--accent);color:var(--accent);}
   .credit{margin-top:10px;font-size:12.5px;letter-spacing:.14em;color:var(--ink-dim);text-transform:uppercase;}
+  /* Touch controls: additive mobile layer, shown only on touch devices while playing */
+  #touch-ui{position:fixed;inset:0;z-index:8;display:none;pointer-events:none;}
+  body.touch #touch-ui.on{display:block;}
+  #touch-ui .tbtn{position:absolute;pointer-events:auto;display:flex;align-items:center;justify-content:center;
+    width:58px;height:58px;border-radius:50%;border:1px solid var(--panel-edge);background:rgba(6,24,30,.55);
+    color:var(--ink);font-size:10px;letter-spacing:1px;text-align:center;touch-action:none;-webkit-tap-highlight-color:transparent;}
+  #touch-ui .tbtn:active{background:rgba(46,230,200,.32);}
+  #t-look{position:absolute;top:0;right:0;width:60%;height:100%;pointer-events:auto;touch-action:none;}
+  #t-stick{position:absolute;left:24px;bottom:92px;width:124px;height:124px;border-radius:50%;
+    border:1px solid var(--panel-edge);background:rgba(6,24,30,.35);pointer-events:auto;touch-action:none;}
+  #t-nub{position:absolute;left:50%;top:50%;width:52px;height:52px;border-radius:50%;
+    background:rgba(46,230,200,.35);border:1px solid var(--panel-edge);transform:translate(-50%,-50%);pointer-events:none;}
+  #t-rise{left:36px;bottom:232px;width:50px;height:50px;font-size:14px;}
+  #t-sink{left:98px;bottom:232px;width:50px;height:50px;font-size:14px;}
+  #t-boost{right:22px;top:34%;}
+  #t-ping{right:22px;top:47%;width:74px;height:74px;font-size:13px;border-color:var(--accent);}
+  #t-fire{right:22px;top:63%;}
+  #t-emp{right:108px;top:40%;}
+  #t-torp{right:108px;top:53%;}
+  #t-decoy{right:108px;top:66%;}
+  #t-pause{top:12px;right:12px;width:44px;height:44px;font-size:14px;}
   #watermark{position:fixed;left:10px;bottom:8px;z-index:15;font-size:11px;letter-spacing:.14em;
          color:rgba(230,245,255,.40);pointer-events:none;text-transform:uppercase;}
   #btn-forge-close{margin-top:10px;}
@@ -233,7 +254,7 @@
     <h2 style="margin-top:0">⚒ ABYSS FORGE</h2>
     <p class="forge-blurb" data-i18n="Describe the vessel you dream of. The forge reads your words as an engineering spec — ask for speed and you trade hull for it — then the Lux3D API builds her in about 3–4 minutes. She is one of one: no other captain sails her.">Describe the vessel you dream of. The forge reads your words as an engineering spec — ask for speed and you trade hull for it — then the Lux3D API builds her in about 3–4 minutes. She is one of one: no other captain sails her.</p>
     <label class="forge-label" data-i18n='Lux3D API key <span>— stays in this browser only · get a free key at <a href="https://labs.aholo.ai/api-keys" target="_blank" rel="noopener">labs.aholo.ai/api-keys</a></span>'>Lux3D API key <span>— stays in this browser only · get a free key at <a href="https://labs.aholo.ai/api-keys" target="_blank" rel="noopener">labs.aholo.ai/api-keys</a></span></label>
-    <input type="password" id="forge-key" placeholder="Paste your Lux3D API key" data-i18n-ph="Paste your Lux3D API key" autocomplete="off">
+    <input type="text" id="forge-key" name="lux3d-api-key" placeholder="Paste your Lux3D API key" data-i18n-ph="Paste your Lux3D API key" autocomplete="off" data-lpignore="true" style="-webkit-text-security:disc;text-security:disc">
     <label class="forge-label" data-i18n='Describe your vessel <span id="forge-count">0 / 200</span>'>Describe your vessel <span id="forge-count">0 / 200</span></label>
     <textarea id="forge-prompt" maxlength="200" rows="3" placeholder="A swift magenta raider with a glass dome, silent thrusters and a heart of gold..." data-i18n-ph="A swift magenta raider with a glass dome, silent thrusters and a heart of gold..."></textarea>
     <div class="forge-stats" id="forge-stats"></div>
@@ -305,6 +326,20 @@
       <button class="btn small" id="btn-end-hangar">HANGAR</button>
     </div>
   </div>
+</div>
+
+<div id="touch-ui">
+  <div id="t-look"></div>
+  <div id="t-stick"><div id="t-nub"></div></div>
+  <div class="tbtn" id="t-rise">▲</div>
+  <div class="tbtn" id="t-sink">▼</div>
+  <div class="tbtn" id="t-boost">BOOST</div>
+  <div class="tbtn" id="t-ping">PING</div>
+  <div class="tbtn" id="t-fire">FIRE</div>
+  <div class="tbtn" id="t-emp">EMP</div>
+  <div class="tbtn" id="t-torp">TORP</div>
+  <div class="tbtn" id="t-decoy">DECOY</div>
+  <div class="tbtn" id="t-pause">| |</div>
 </div>
 
 <script type="importmap">

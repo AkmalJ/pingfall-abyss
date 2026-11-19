@@ -4520,3 +4520,122 @@ function wire(){
   if (('ontouchstart' in window) || (window.matchMedia && matchMedia('(pointer: coarse)').matches)) $('touch-note').style.display = '';
   animate();
 })();
+
+// ============================ TOUCH CONTROLS ============================
+// Additive mobile layer. Activates only on touch-first devices and writes
+// into the same keys{} table / calls the same action functions the keyboard
+// and mouse use. Desktop input paths above are untouched.
+(function initTouchControls(){
+  const fine = window.matchMedia && window.matchMedia('(pointer: fine)').matches;
+  const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  if (!coarse && !(!fine && navigator.maxTouchPoints > 0)) return;
+  const ui = document.getElementById('touch-ui');
+  if (!ui) return;
+  document.body.classList.add('touch');
+  const $id = id => document.getElementById(id);
+  const stick = $id('t-stick'), nub = $id('t-nub'), look = $id('t-look');
+  let stickId = null, stickCx = 0, stickCy = 0;
+  let lookId = null, lookX = 0, lookY = 0;
+  function clearStick(){
+    keys['KeyW'] = keys['KeyS'] = keys['KeyA'] = keys['KeyD'] = false;
+    if (nub) nub.style.transform = 'translate(-50%,-50%)';
+  }
+  if (stick){
+    stick.addEventListener('touchstart', e => {
+      e.preventDefault(); AudioSys.init();
+      const t = e.changedTouches[0]; stickId = t.identifier;
+      const r = stick.getBoundingClientRect();
+      stickCx = r.left + r.width / 2; stickCy = r.top + r.height / 2;
+    }, { passive:false });
+    stick.addEventListener('touchmove', e => {
+      e.preventDefault();
+      for (const t of e.changedTouches){
+        if (t.identifier !== stickId) continue;
+        let dx = t.clientX - stickCx, dy = t.clientY - stickCy;
+        const m = Math.hypot(dx, dy), max = 42;
+        if (m > max){ dx = dx / m * max; dy = dy / m * max; }
+        if (nub) nub.style.transform = 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px))';
+        keys['KeyW'] = dy < -11; keys['KeyS'] = dy > 11;
+        keys['KeyA'] = dx < -11; keys['KeyD'] = dx > 11;
+      }
+    }, { passive:false });
+    const sEnd = e => { for (const t of e.changedTouches){ if (t.identifier === stickId){ stickId = null; clearStick(); } } };
+    stick.addEventListener('touchend', sEnd);
+    stick.addEventListener('touchcancel', sEnd);
+  }
+  if (look){
+    look.addEventListener('touchstart', e => {
+      const t = e.changedTouches[0];
+      lookId = t.identifier; lookX = t.clientX; lookY = t.clientY;
+    }, { passive:true });
+    look.addEventListener('touchmove', e => {
+      e.preventDefault();
+      for (const t of e.changedTouches){
+        if (t.identifier !== lookId) continue;
+        const dx = t.clientX - lookX, dy = t.clientY - lookY;
+        lookX = t.clientX; lookY = t.clientY;
+        if (uiState === 'playing' && player){
+          player.yaw -= dx * 0.0042;
+          player.pitch = clamp(player.pitch - dy * 0.0042, -1.15, 1.15);
+        }
+      }
+    }, { passive:false });
+    const lEnd = e => { for (const t of e.changedTouches){ if (t.identifier === lookId) lookId = null; } };
+    look.addEventListener('touchend', lEnd);
+    look.addEventListener('touchcancel', lEnd);
+  }
+  function hold(id, on, off){
+    const el = $id(id); if (!el) return;
+    el.addEventListener('touchstart', e => { e.preventDefault(); AudioSys.init(); on(); }, { passive:false });
+    if (off){
+      const end = e => { e.preventDefault(); off(); };
+      el.addEventListener('touchend', end);
+      el.addEventListener('touchcancel', end);
+    }
+  }
+  function tap(id, fn){ hold(id, () => { if (uiState === 'playing') fn(); }); }
+  tap('t-ping', () => doPing());
+  tap('t-torp', () => fireTorpedo());
+  tap('t-decoy', () => dropDecoy());
+  tap('t-emp', () => fireEMP());
+  hold('t-fire', () => { if (G) G.cannonHeld = true; }, () => { if (G) G.cannonHeld = false; });
+  hold('t-boost', () => { keys['ShiftLeft'] = true; }, () => { keys['ShiftLeft'] = false; });
+  hold('t-rise', () => { keys['KeyR'] = true; }, () => { keys['KeyR'] = false; });
+  hold('t-sink', () => { keys['KeyC'] = true; }, () => { keys['KeyC'] = false; });
+  hold('t-pause', () => { if (uiState === 'playing') pauseGame(); else if (uiState === 'paused') resumeGame(); });
+  // Hangar preview: touch-drag rotates, mirroring the desktop drag path.
+  let hId = null, hX = 0;
+  document.addEventListener('touchstart', e => {
+    if (uiState !== 'hangar') return;
+    const st = $id('hangar-stage'); if (!st) return;
+    const r = st.getBoundingClientRect(), t = e.changedTouches[0];
+    if (t.clientX >= r.left && t.clientX <= r.right && t.clientY >= r.top && t.clientY <= r.bottom){ hId = t.identifier; hX = t.clientX; }
+  }, { passive:true });
+  document.addEventListener('touchmove', e => {
+    if (hId === null) return;
+    for (const t of e.changedTouches){
+      if (t.identifier !== hId) continue;
+      const dx = t.clientX - hX; hX = t.clientX;
+      if (hangarPreview) hangarPreview.rotation.y += dx * 0.01;
+    }
+  }, { passive:true });
+  const hEnd = e => { for (const t of e.changedTouches){ if (t.identifier === hId) hId = null; } };
+  document.addEventListener('touchend', hEnd);
+  document.addEventListener('touchcancel', hEnd);
+  // Visibility + one-shot fullscreen/landscape when a dive starts.
+  let wasPlaying = false;
+  setInterval(() => {
+    const playing = uiState === 'playing';
+    ui.classList.toggle('on', playing);
+    if (playing && !wasPlaying){
+      try { const f = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); if (f && f.catch) f.catch(() => {}); } catch(e) {}
+      try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch(e) {}
+    }
+    if (!playing && wasPlaying){
+      if (G) G.cannonHeld = false;
+      keys['ShiftLeft'] = keys['KeyR'] = keys['KeyC'] = false;
+      stickId = null; clearStick();
+    }
+    wasPlaying = playing;
+  }, 250);
+})();
