@@ -1447,7 +1447,7 @@ function spawnCrystal(scene, pos, value, golden = false){
   group.add(halo);
   const c = { group, value, golden, taken: false, baseY: pos.y, phase: rand(0, Math.PI * 2),
               halo, haloBase: golden ? 0.55 : 0.42, haloScale: golden ? 4.6 : 3.2 };
-  if (G && G.mode === 'survival') c.floor = survFloorOf(pos.y);
+  if (G && G.mode === 'survival'){ c.floor = survFloorOf(pos.y); group.userData.floor = c.floor; }
   G.crystals.push(c);
   return c;
 }
@@ -2734,7 +2734,8 @@ function doPing(){
   for (const r of revealables){
     const rv = r.userData.reveal; if (!rv) continue;
     const d = r.position.distanceTo(pp);
-    if (d < R * 1.3){ rv.at = G.time + d / CONFIG.sonar.waveSpeed; rv.dur = CONFIG.sonar.revealDur * (r.userData.isHunter ? player.d.echoMul : (r.userData.isCrystal ? 1.6 : 1)); }
+    const floorCrystal = r.userData.isCrystal && G.mode === 'survival' && r.userData.floor === G.floor;
+    if (floorCrystal || d < R * 1.3){ rv.at = G.time + d / CONFIG.sonar.waveSpeed; rv.dur = CONFIG.sonar.revealDur * (r.userData.isHunter ? player.d.echoMul : (r.userData.isCrystal ? 1.6 : 1)); }
   }
   for (const h of G.hunters){
     if (h.dead || h.type.hearing <= 0) continue;
