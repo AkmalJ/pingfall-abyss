@@ -3553,22 +3553,23 @@ function updateSurvival(dt){
   // the boss — and only resumes once you descend past that floor.
   const onBossFloor = G.floor > 0 && G.floor % 10 === 0;
   if (onBossFloor && G.time >= S.collapseStart){
-    const holdY = -((G.floor - 1) * 40) + 24;
+    const holdY = -((G.floor - 1) * 40) + 16; // parked at the entrance: crush band starts above the ceiling, whole floor is safe
     if (G.collapseY < holdY) G.collapseY = holdY; // never crush a boss fight
     if (!G.collapseHeld){ G.collapseHeld = true; toast('🟥 THE COLLAPSE HOLDS — finish this floor\'s guardian!', 3400); }
     G.crushT = 0;
   } else if (G.time >= S.collapseStart){
     if (G.collapseHeld){ G.collapseHeld = false; toast('🟥 THE COLLAPSE RESUMES — DIVE!', 3000); }
-    const speed = S.collapseBase + G.stratum * 0.3 + G.time / 420;
+    const speed = S.collapseBase * 0.65 + G.stratum * 0.2 + G.time / 600; // slowed 19 Nov — gated floors take longer than the old pace assumed
     G.collapseY -= speed * dt;
-    // Sealed-gate hold (Akmal 19 Nov): a player pinned at a locked gate by
-    // the pressure clamp CANNOT dive out of the crush zone — the Collapse
-    // drained ~40 HP in ~3 s there and read as a vampire. Now it waits
-    // 20 m above the sealed gate (the pinned player sits 17 m below it,
-    // outside the 14 m crush band) and resumes the moment the gate opens.
+    // Sealed-gate hold (Akmal 19 Nov): while this floor's gate is sealed
+    // the Collapse waits ABOVE THE FLOOR'S CEILING (entrance + 16 m, so
+    // its 14 m crush band never enters the floor) — the whole floor stays
+    // huntable, and the plane only comes down once the gate opens. (The
+    // first version parked mid-floor and crushed all but the bottom few
+    // metres of the floor the player still had to work.)
     const gateSealed = !!(G.survGate && G.survGate.floor === G.floor && !G.survGate.open);
     if (gateSealed){
-      const gateHoldY = -(G.floor * 40) + 20;
+      const gateHoldY = -((G.floor - 1) * 40) + 16;
       if (G.collapseY < gateHoldY){
         G.collapseY = gateHoldY;
         if (!G.gateHeld){ G.gateHeld = true; toast('🟥 THE COLLAPSE WAITS ABOVE THE SEALED GATE — open it and DIVE!', 3400); }
