@@ -2722,6 +2722,59 @@ function hearNoise(h, pos, amt, kind){
   h.awareness = clamp(h.awareness + amt, 0, 1);
   if (amt > 0.04){ h.lastNoise.copy(pos); h.targetKind = kind; }
 }
+function drawRadar(){
+  const cv = $('radar'); if (!cv || !player || !G) return;
+  const ctx = cv.getContext('2d'); if (!ctx) return;
+  const W = cv.width, C = W / 2, R = C - 6, RANGE = 150;
+  ctx.clearRect(0, 0, W, W);
+  ctx.beginPath(); ctx.arc(C, C, R, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(3,20,24,0.66)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(46,230,200,0.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.beginPath(); ctx.arc(C, C, R * 0.55, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(46,230,200,0.18)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.beginPath(); ctx.arc(C, C, R * 0.25, 0, Math.PI * 2); ctx.stroke();
+  const sa = (G.time * 0.9) % (Math.PI * 2);
+  ctx.beginPath(); ctx.moveTo(C, C);
+  ctx.lineTo(C + Math.sin(sa) * R, C - Math.cos(sa) * R);
+  ctx.strokeStyle = 'rgba(46,230,200,0.25)'; ctx.stroke();
+  const pp = player.group.position, sy = Math.sin(player.yaw), cyw = Math.cos(player.yaw);
+  const plot = (wp) => {
+    const dx = wp.x - pp.x, dz = wp.z - pp.z;
+    const f = dx * sy + dz * cyw, r = dx * cyw - dz * sy;
+    let x = (r / RANGE) * R, y = -(f / RANGE) * R;
+    const m = Math.hypot(x, y), rim = m > R - 4;
+    if (rim){ x *= (R - 4) / m; y *= (R - 4) / m; }
+    return { x: C + x, y: C + y, rim };
+  };
+  if (G.mode === 'survival' && G.survGate && G.survGate.pos && G.survGate.floor === G.floor){
+    const q = plot(G.survGate.pos);
+    ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = G.survGate.open ? '#ffc93a' : 'rgba(255,201,58,0.45)';
+    const s2 = G.survGate.open ? 6 : 5; ctx.fillRect(-s2 / 2, -s2 / 2, s2, s2); ctx.restore();
+  }
+  for (const c of G.crystals){
+    if (c.taken) continue;
+    if (G.mode === 'survival' && c.floor !== G.floor) continue;
+    const gp = c.group.position, d = gp.distanceTo(pp);
+    const rv = c.group.userData.reveal;
+    let a = 0;
+    if (rv && G.time >= rv.at) a = clamp(1 - (G.time - rv.at) / rv.dur, 0, 1);
+    if (d < 26) a = Math.max(a, 0.85);
+    if (a <= 0.02) continue;
+    const q = plot(gp);
+    ctx.beginPath(); ctx.arc(q.x, q.y, q.rim ? 3 : 4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(111,245,226,' + (0.25 + 0.75 * a).toFixed(3) + ')'; ctx.fill();
+    const dy = gp.y - pp.y;
+    if (dy > 4 || dy < -4){
+      ctx.beginPath();
+      if (dy > 4){ ctx.moveTo(q.x - 3, q.y - 6); ctx.lineTo(q.x + 3, q.y - 6); ctx.lineTo(q.x, q.y - 9.5); }
+      else { ctx.moveTo(q.x - 3, q.y + 6); ctx.lineTo(q.x + 3, q.y + 6); ctx.lineTo(q.x, q.y + 9.5); }
+      ctx.closePath(); ctx.fill();
+    }
+  }
+  ctx.beginPath(); ctx.moveTo(C, C - 6); ctx.lineTo(C - 4, C + 5); ctx.lineTo(C + 4, C + 5); ctx.closePath();
+  ctx.fillStyle = '#e8fff9'; ctx.fill();
+}
 function doPing(){
   if (!player || !G || G.over || uiState !== 'playing') return;
   if (G.time < (G.pingReadyAt || 0)){ toast('📡 Sonar recharging — ' + Math.ceil(G.pingReadyAt - G.time) + 's', 1200); return; }
@@ -3900,6 +3953,7 @@ function updateHUD(){
   $('m-batt').firstElementChild.style.width = clamp(p.batt / maxB * 100, 0, 100) + '%';
   const pingEl = $('ping-txt');
   if (pingEl){ const pc = Math.max(0, (G.pingReadyAt || 0) - G.time); pingEl.textContent = pc > 0 ? Math.ceil(pc) + 's' : 'READY'; }
+  drawRadar();
   $('noise-txt').textContent = Math.round(G.noise) + '%';
   $('m-noise').firstElementChild.style.width = G.noise + '%';
   const heatRow = $('heat-row');

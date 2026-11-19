@@ -61,6 +61,7 @@
   #hud-tl{top:14px;left:14px;width:250px;}
   #hud-tr{top:14px;right:14px;text-align:right;min-width:170px;}
   #hud-bc{bottom:16px;left:50%;transform:translateX(-50%);text-align:center;min-width:340px;}
+  #hud-radar{bottom:16px;right:16px;padding:7px;border-radius:50%;line-height:0;}
   #hud-obj{top:14px;left:50%;transform:translateX(-50%);text-align:center;max-width:520px;}
   .meter{height:9px;background:#0a2530;border-radius:5px;overflow:hidden;margin:3px 0 7px;}
   .meter>i{display:block;height:100%;transition:width .12s;}
@@ -138,7 +139,8 @@
     <div style="margin-top:3px;color:var(--ink-dim)" id="time-txt">00:00</div>
     <div style="margin-top:3px;display:none;font-weight:bold" id="collapse-row">🟥 COLLAPSE <span id="collapse-txt"></span></div>
   </div>
-  <div class="hudbox" id="hud-bc"><span id="ctl-txt">W thrust · Mouse steer · R/C rise/sink · SPACE ping · HOLD Click pulse cannon · F torpedo · Q decoy · E EMP · Esc pause</span></div>
+  <div class="hudbox" id="hud-bc"><span id="ctl-txt">W thrust · Mouse steer · R/C rise/sink · SHIFT boost · SPACE ping · HOLD Click pulse cannon · F torpedo · Q decoy · E EMP · Esc pause</span></div>
+  <div class="hudbox" id="hud-radar"><canvas id="radar" width="164" height="164"></canvas></div>
   <div id="hint"></div>
 </div>
 <div id="toast"></div>
