@@ -1066,7 +1066,7 @@ const STR_ZH = {
   'CALM · coins ×0.5': '平静 · 金币 ×0.5', 'STANDARD · ×1': '标准 · ×1', 'NIGHTMARE · ×2': '噩梦 · ×2',
   '⚓ HANGAR': '⚓ 机库', '? HOW TO PLAY': '? 玩法说明', 'HOW TO PLAY': '玩法说明',
   'Wallet: 🪙 <span class="coins" id="title-coins">0</span> · Best depth <span id="title-depth">—</span> · Best survival <span id="title-time">—</span>': '钱包： 🪙 <span class="coins" id="title-coins">0</span> · 最深深度 <span id="title-depth">—</span> · 最佳生存 <span id="title-time">—</span>',
-  'Made by AkmalJ · Powered by Aholo Lux3D': '作者 AkmalJ · 由 Aholo Lux3D 驱动',
+  'Powered by Aholo Lux3D': '由 Aholo Lux3D 驱动',
   '📱 Menus, hangar and the forge work by touch — diving itself needs a keyboard & mouse.': '📱 菜单、机库和锻造炉支持触控——但潜入航行需要键盘和鼠标。',
   'EXPEDITION — SELECT ZONE': '探险 —— 选择区域', '← BACK': '← 返回', '← BACK TO HANGAR': '← 返回机库',
   'Click a sub to preview it · drag on the water to rotate · scroll to zoom': '点击潜艇预览 · 拖动水面旋转 · 滚轮缩放',
