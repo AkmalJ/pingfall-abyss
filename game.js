@@ -1516,7 +1516,7 @@ function spawnNest(scene, pos){
   scene.add(group);
   registerReveal(group, { min: 0.05 });
   tintRevealEntries(group, 0x4a7a3d, 0.55);
-  const n = { group, hp: 150, dead: false };
+  const n = { group, hp: 150, maxHp: 150, dead: false, hpBar: null };
   G.nests.push(n);
   return n;
 }
@@ -2978,10 +2978,25 @@ function makeHpBar(h){
   h.group.add(grp);
   h.hpBar = { fg, w };
 }
+function makeNestBar(n){
+  const w = 6.5;
+  const grp = new THREE.Group();
+  const bg = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x0a0f14, depthTest: false, transparent: true, opacity: 0.75 }));
+  bg.scale.set(w + 0.5, 1.05, 1); bg.renderOrder = 998;
+  const fg = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x53ff7a, depthTest: false, transparent: true, opacity: 0.95 }));
+  fg.center.set(0, 0.5); fg.scale.set(w, 0.62, 1); fg.position.x = -w / 2; fg.renderOrder = 999;
+  grp.add(bg); grp.add(fg); grp.position.y = 6.2;
+  n.group.add(grp);
+  return { fg, w, grp };
+}
 function damageTarget(c, dmg){
   if (c.kind === 'nest'){
-    c.ref.hp -= dmg; explosionFx(c.ref.group.position, 2.5); AudioSys.hit();
-    if (c.ref.hp <= 0 && !c.ref.dead){ c.ref.dead = true; explosionFx(c.ref.group.position, 10); AudioSys.boom(); removeEntity(c.ref.group); G.nestsDown++; toast('Nest destroyed (' + G.nestsDown + '/' + G.zone.mission.nests + ')'); updateObjective(); }
+    const n = c.ref;
+    n.hp -= dmg; explosionFx(n.group.position, 2.5); AudioSys.hit();
+    const rvN = n.group.userData.reveal; if (rvN) rvN.at = G.time; // a hit nest flares bright — visible hit feedback
+    if (!n.hpBar) n.hpBar = makeNestBar(n);
+    n.hpBar.fg.scale.x = n.hpBar.w * clamp(n.hp / n.maxHp, 0, 1);
+    if (n.hp <= 0 && !n.dead){ n.dead = true; explosionFx(n.group.position, 10); AudioSys.boom(); removeEntity(n.group); G.nestsDown++; toast('Nest destroyed (' + G.nestsDown + '/' + G.zone.mission.nests + ')'); updateObjective(); }
     return;
   }
   const h = c.ref;
@@ -3072,7 +3087,7 @@ function updatePulseCannon(dt){
         }
       }
       if (!hitDone) for (const n of G.nests){
-        if (!n.dead && b.group.position.distanceTo(n.group.position) < 3.4){
+        if (!n.dead && b.group.position.distanceTo(n.group.position) < 5.2){
           damageTarget({ kind: 'nest', ref: n }, P.dmg); hitDone = true; break;
         }
       }
