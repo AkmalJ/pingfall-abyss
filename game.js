@@ -71,25 +71,25 @@ const CONFIG = {
   // ---- zones (data-driven; one arena system, re-tinted per zone) ----
   zones: [
     { id:1, name:'The Shelf',     depth:[60,160],    crystalValue:2,  crystals:12, escape:10, rec:'Minnow',
-      mission:{ type:'collect', quota:7 },  hunters:['stalker'], hunterSpeedMul:0.7, mines:0, jellies:5,
-      tint:{ water:0x06222e, fog:0x04161d, accent:0x35e0c8 }, decor:'rocks',
-      desc:'Shallow training trench. One slow hunter.' },
+      mission:{ type:'collect', quota:7 },  hunters:['stalker'], hunterSpeedMul:0.7, mines:0, jellies:5, fogFar:118,
+      tint:{ water:0x082a38, fog:0x04161d, accent:0x35e0c8 }, decor:'rocks',
+      desc:'Sisa cahaya terakhir. Satu hunter lambat — belajarlah di sini.' },
     { id:2, name:'Kelp Ruins',    depth:[160,320],   crystalValue:4, crystals:14, escape:20, rec:'Minnow or Barracuda',
-      mission:{ type:'rescue' },            hunters:['stalker','skitter'], hunterSpeedMul:0.9, mines:0, jellies:7,
+      mission:{ type:'rescue' },            hunters:['stalker','skitter'], hunterSpeedMul:0.9, mines:0, jellies:7, fogFar:80, decorMul:1.7,
       tint:{ water:0x0a2e1e, fog:0x061a10, accent:0x59e08a }, decor:'pillars',
-      desc:'A stranded mini-sub waits among the pillars.' },
+      desc:'Labirin pilar dan kelp. Mini-sub hilang di dalamnya — radar adalah matamu.' },
     { id:3, name:'The Wreck Field', depth:[320,520], crystalValue:8, crystals:16, escape:40, rec:'Barracuda',
-      mission:{ type:'nests', nests:3 },    hunters:['stalker','skitter','brute','skitter'], hunterSpeedMul:1.0, mines:5, jellies:9,
+      mission:{ type:'nests', nests:3 },    hunters:['stalker','skitter','brute','skitter'], hunterSpeedMul:1.0, mines:8, jellies:9, decorMul:1.7,
       tint:{ water:0x1c1410, fog:0x120c08, accent:0xe08a4d }, decor:'wreck',
-      desc:'Mines and hunter nests among the wrecks.' },
+      desc:'Medan perang kuburan kapal: ranjau, sarang hunter, bangkai buat berlindung.' },
     { id:4, name:'Magenta Deep',  depth:[520,780],   crystalValue:14, crystals:18, escape:75, rec:'Phantom',
-      mission:{ type:'survive', time:75 },  hunters:['stalker','skitter','sentry','brute','stalker'], hunterSpeedMul:1.25, mines:6, jellies:10,
-      tint:{ water:0x2a0a24, fog:0x1a0616, accent:0xe05ad0 }, decor:'crystals',
-      desc:'A sentry listens here. Survive the timer.' },
+      mission:{ type:'survive', time:75 },  hunters:['stalker','skitter','sentry','brute','sentry'], hunterSpeedMul:1.25, mines:6, jellies:10, fogFar:92,
+      tint:{ water:0x1e0618, fog:0x12030e, accent:0xe05ad0 }, decor:'crystals',
+      desc:'Semua bercahaya, tapi Sentry mendengar. Main senyap — bertahanlah.' },
     { id:5, name:'The Abyss Gate', depth:[780,1100], crystalValue:24, crystals:20, escape:150, rec:'Leviathan',
-      mission:{ type:'collect', quota:11 }, hunters:['stalker','skitter','brute','sentry','lurker','skitter'], hunterSpeedMul:1.15, mines:7, jellies:12,
+      mission:{ type:'collect', quota:11 }, hunters:['stalker','skitter','brute','sentry','lurker','skitter'], hunterSpeedMul:1.15, mines:7, jellies:12, fogFar:100,
       tint:{ water:0x12081f, fog:0x0a0414, accent:0x8a6aff }, decor:'gate',
-      desc:'Everything hunts here. Reach the final gate.' },
+      desc:'Semua memburu di sini — dan Penjaga Gerbang menunggu di gerbang terakhir.' },
   ],
   arena: { radius: 235, floorY: -30, ceilY: 38 },
 
@@ -1755,7 +1755,7 @@ const dressing = {
     const stone = std(0x3d5c4c, { roughness: 0.9, flatShading: true });
     const stone2 = std(0x33503f, { roughness: 0.9, flatShading: true });
     const spots = [];
-    for (let i = 0; i < 11; i++){
+    for (let i = 0, nP = Math.round(11 * (zone.decorMul || 1)); i < nP; i++){
       const p = randArenaPos(38, 205, 0, 0);
       spots.push(p);
       const broken = Math.random() < 0.35;
@@ -1789,7 +1789,7 @@ const dressing = {
     const woodMat = std(0x4a3826, { roughness: 0.9 });
     const hullGeo = new THREE.CylinderGeometry(5, 5.6, 16, 14, 1, true, 0, Math.PI);
     hullGeo.rotateZ(Math.PI / 2); // axis along X, shell opens downward = capsized hull
-    for (let s = 0; s < 3; s++){
+    for (let s = 0, nW = Math.round(3 * (zone.decorMul || 1)); s < nW; s++){
       const c = randArenaPos(85, 175, 0, 0);
       const site = new THREE.Group();
       site.position.set(c.x, F - 1.5, c.z);
@@ -1833,16 +1833,16 @@ const dressing = {
     const F = CONFIG.arena.floorY;
     for (let i = 0; i < 8; i++){
       const c = makeAsset('crystal');
-      c.scale.setScalar(rand(1.5, 2.7));
+      c.scale.setScalar(rand(1.8, 3.3));
       const p = randArenaPos(30, 210, 0, 0);
       c.position.set(p.x, F + 1.4, p.z);
       c.rotation.y = rand(0, 3);
-      tintAsset(c, zone.tint.accent, 0.55);
+      tintAsset(c, zone.tint.accent, 0.8);
       g.add(c);
     }
     const stalkMat = std(0x3a1030, { roughness: 0.8 });
-    const headMat = new THREE.MeshStandardMaterial({ color: 0x57104a, emissive: zone.tint.accent, emissiveIntensity: 1.15, roughness: 0.4 });
-    for (let i = 0; i < 13; i++){
+    const headMat = new THREE.MeshStandardMaterial({ color: 0x57104a, emissive: zone.tint.accent, emissiveIntensity: 1.5, roughness: 0.4 });
+    for (let i = 0; i < 18; i++){
       const p = randArenaPos(35, 205, 0, 0);
       const cl = new THREE.Group(); cl.position.set(p.x, F - 1.5, p.z);
       const n = randi(3, 5);
@@ -1853,7 +1853,7 @@ const dressing = {
         const head = new THREE.Mesh(new THREE.SphereGeometry(rand(0.3, 0.52), 10, 8), headMat);
         head.position.set(ox, h + 0.25, oz); cl.add(head);
       }
-      const glow = makeGlowSprite(zone.tint.accent, rand(4.5, 6.5), 0.34);
+      const glow = makeGlowSprite(zone.tint.accent, rand(4.5, 6.5), 0.45);
       glow.position.y = 1.6; cl.add(glow);
       addGlowPulse(glow, 0.22, rand(1.1, 1.9), 0.1);
       g.add(cl);
@@ -2249,6 +2249,7 @@ function addSurvivalDressing(scene){
 function startExpedition(zone){
   revealables = [];
   gameScene = baseGameScene(zone.tint.fog);
+  if (zone.fogFar) gameScene.fog.far = zone.fogFar; // per-zone murk: the Shelf stays clear, the Kelp Ruins close in
   G = newG('expedition'); G.zone = zone;
   G.crystalsTotal = zone.crystals;
   G.surviveT = zone.mission.time || 0;
@@ -2266,6 +2267,10 @@ function startExpedition(zone){
     while (pos.distanceTo(player.group.position) < 75) pos = randArenaPos(70, 195);
     const h = spawnHunter(gameScene, typeId, pos);
     h.speedMul = zone.hunterSpeedMul;
+  }
+  if (zone.id === 5){ // the Gate Guardian waits in front of the final gate
+    const grd = spawnHunter(gameScene, 'brute', new THREE.Vector3(rand(-35, 35), 2, -165 + rand(28, 48)), { hpMul: 3, scaleMul: 1.7 });
+    grd.speedMul = zone.hunterSpeedMul;
   }
   for (let i=0;i<zone.jellies;i++) spawnJelly(gameScene, randArenaPos(25, 210), zone.tint.accent);
   for (let i=0;i<zone.mines;i++) spawnMine(gameScene, randArenaPos(45, 195));
