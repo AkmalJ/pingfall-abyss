@@ -16,9 +16,9 @@ const CONFIG = {
   assetYawFix: { 'hunter': -Math.PI / 2 }, // per-model GLB facing fix, applied on the loader wrap so it survives the movement lookAt. 'hunter' was authored head-at-+X (angler lure + jaw at +X, tail fin at -X — verified against the geometry), so -90° puts its face on +Z like the movement/swim code assumes. 'hunter-brute' (head +Z) and 'hunter-sentry' (face +Z) verified correct as authored.
 
   // ---- sonar / noise / battery ----
-  sonar: { baseRadius: 95, waveSpeed: 150, revealDur: 3.4, pingCost: 10,
+  sonar: { baseRadius: 95, waveSpeed: 150, revealDur: 3.4, pingCost: 15,
            pingNoiseRadiusMul: 1.15, noiseDecay: 16, engineHearBase: 30 },
-  batteryRegen: 0.8, // was 2.4 — at 2.4/s a 10-cost ping refilled in ~4 s and battery never visibly dropped (Akmal playtest 19 Nov); at 0.8/s a ping takes 12.5 s to earn back, so cells/caches matter
+  batteryRegen: 0.5, // 2.4 -> 0.8 -> 0.5 (Akmal 19 Nov: make battery scarce so the now floor-wide crystal ping cannot be spammed); a 15-cost ping takes 30 s to earn back, a +30 cell/cache is worth exactly 2 pings
   emp: { cooldown: 20 },
   decoy: { life: 12, radius: 95, pulse: 0.6 },
 
