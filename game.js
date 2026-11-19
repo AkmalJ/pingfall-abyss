@@ -1367,7 +1367,7 @@ function spawnHunter(scene, typeId, pos, opts = {}){
   group.scale.setScalar(t.modelScale * (opts.scaleMul || 1));
   group.position.copy(pos);
   scene.add(group);
-  registerReveal(group, { min: 0.05 });
+  registerReveal(group, { min: 0.05, prox: 46 });
   tintRevealEntries(group, t.tint, t.dark ? 0.85 : 0.5);
   if (!group.userData.core){
     const core = glowBall(0.42, 0x2e7fd9); core.position.set(0, -0.4, CONFIG.assetSize[t.model] * 0.3);
@@ -2205,7 +2205,7 @@ function addSurvivalDressing(scene){
   scene.add(grp);
   registerReveal(grp, { min: 0.45 });
   envFx.shaft = grp;
-  envFx.dressColliders = dressCols;
+  envFx.dressColliders = dressCols.map(c => ({ ...c, rad: c.rad * 0.8 })); // 0.8: same phantom-hitbox trim as the band rocks
   addMarineSnow(scene);
 }
 
@@ -2286,7 +2286,7 @@ function ensureBands(){
   // Rock colliders (spheres) for the player push-out in updatePlayer —
   // band rocks used to be ghost geometry the sub swam straight through.
   if (!G.colliders) G.colliders = [];
-  const addCollider = (x, y, z, rad) => G.colliders.push({ x, y, z, rad });
+  const addCollider = (x, y, z, rad) => G.colliders.push({ x, y, z, rad: rad * 0.72 }); // 0.72: collider hugs the visible rock, not its bounding sphere
   while (G.bandY > py - 290){
     G.bandY -= S.bandEvery;
     const y = G.bandY + rand(-11, 11);
@@ -2822,6 +2822,7 @@ function damageTarget(c, dmg){
   const h = c.ref;
   if (h.maxHp === undefined) h.maxHp = h.hp;
   h.hp -= dmg * h.dmgTakenMul;
+  const rvH = h.group.userData.reveal; if (rvH) rvH.at = G.time; // a hit hunter lights up — no invisible attackers
   explosionFx(h.group.position, 2.5 * Math.max(1, h.group.scale.x));
   // Visible HP (Akmal 19 Nov): a bar over every hunter once it is hurt, so
   // every hit visibly counts — green draining to red.
@@ -3059,7 +3060,7 @@ function updateHunters(dt){
     }
     // contact damage
     const hitRange = h.type.hitR * Math.max(1, g.scale.x) * 0.8 + player.radius;
-    if (distP < hitRange && h.hitCd <= 0){ h.hitCd = 1.2; damagePlayer(h.dmgAbs || h.type.dmg, pos, hunterName(h)); }
+    if (distP < hitRange && h.hitCd <= 0){ h.hitCd = 1.2; const rvA = h.group.userData.reveal; if (rvA) rvA.at = G.time; damagePlayer(h.dmgAbs || h.type.dmg, pos, hunterName(h)); }
     else if (distP < hitRange + 5.5 && h.closeCd <= 0){
       h.closeCd = 6; G.closeCalls++;
       if (G.mode === 'survival'){ const b = Math.round(CONFIG.econ.closeCall * G.diff.mult); bankCoins(b); }
@@ -3761,7 +3762,7 @@ function updatePlayer(dt){
         const d = Math.sqrt(d2), push = (rr - d) / d;
         g.position.x += dx * push; g.position.y += dy * push; g.position.z += dz * push;
         const vn = (p.vel.x * dx + p.vel.y * dy + p.vel.z * dz) / d;
-        if (vn < -12 && G.time > (G.impactCdAt || 0)){ // hard rock impact costs hull (Akmal 19 Nov)
+        if (vn < -12 && (rr - d) > 0.9 && G.time > (G.impactCdAt || 0)){ // hard rock impact costs hull (Akmal 19 Nov); penetration gate: a graze never damages
           G.impactCdAt = G.time + 0.7;
           damagePlayer(Math.min(15, (-vn - 11) * 1.05), new THREE.Vector3(c.x, c.y, c.z), 'Rock impact');
         }
@@ -3783,7 +3784,7 @@ function updatePlayer(dt){
         const d = Math.sqrt(d2), push = (rr - d) / d;
         g.position.x += dx * push; g.position.y += dy * push; g.position.z += dz * push;
         const vn = (p.vel.x * dx + p.vel.y * dy + p.vel.z * dz) / d;
-        if (vn < -12 && G.time > (G.impactCdAt || 0)){ // hard rock impact costs hull (Akmal 19 Nov)
+        if (vn < -12 && (rr - d) > 0.9 && G.time > (G.impactCdAt || 0)){ // hard rock impact costs hull (Akmal 19 Nov); penetration gate: a graze never damages
           G.impactCdAt = G.time + 0.7;
           damagePlayer(Math.min(15, (-vn - 11) * 1.05), new THREE.Vector3(c.x, cy, c.z), 'Rock impact');
         }
