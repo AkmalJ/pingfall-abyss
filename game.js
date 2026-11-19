@@ -1063,7 +1063,7 @@ async function runForge(){
 const STR_ZH = {
   '— A B Y S S —<br>Ping to see. Ping and be heard.': '— 深 渊 —<br>以声探路，以声招敌。',
   '▶ EXPEDITION': '▶ 探险', '▼ SURVIVAL': '▼ 生存', 'DIVE — SURVIVAL': '潜入 —— 生存', '⚒ ABYSS FORGE': '⚒ 深渊锻造',
-  'CALM · coins ×0.5': '平静 · 金币 ×0.5', 'STANDARD · ×1': '标准 · ×1', 'NIGHTMARE · ×2': '噩梦 · ×2',
+  'CALM · coins ×0.5 · NO COLLAPSE': '平静 · 金币 ×0.5 · 无坍塌', 'STANDARD · ×1': '标准 · ×1', 'NIGHTMARE · ×2': '噩梦 · ×2',
   '⚓ HANGAR': '⚓ 机库', '? HOW TO PLAY': '? 玩法说明', 'HOW TO PLAY': '玩法说明',
   'Wallet: 🪙 <span class="coins" id="title-coins">0</span> · Best depth <span id="title-depth">—</span> · Best survival <span id="title-time">—</span>': '钱包： 🪙 <span class="coins" id="title-coins">0</span> · 最深深度 <span id="title-depth">—</span> · 最佳生存 <span id="title-time">—</span>',
   'Powered by Aholo Lux3D': '由 Aholo Lux3D 驱动',
@@ -3984,12 +3984,14 @@ function updateSurvival(dt){
   // T-10s and at the start, a wall that flares as it nears, the red
   // vignette in animate(), and a damage RAMP — gentle at first, lethal
   // only if the player lingers in the crush zone.
-  if (!G.collapseStage && G.time >= S.collapseStart - 10){
+  const collapseOn = G.diffId !== 'calm'; // CALM has no Collapse (Akmal 19 Nov): the relaxed lane — half coins, no ceiling coming down
+  if (!collapseOn && G.collapseMesh) G.collapseMesh.visible = false;
+  if (collapseOn && !G.collapseStage && G.time >= S.collapseStart - 10){
     G.collapseStage = 1;
     toast('⚠ THE DEEP STIRS — THE COLLAPSE BEGINS IN 10s. KEEP DIVING!', 3600);
     AudioSys.tone(98, 0.8, 'sawtooth', 0.09, 65);
   }
-  if (G.collapseStage === 1 && G.time >= S.collapseStart){
+  if (collapseOn && G.collapseStage === 1 && G.time >= S.collapseStart){
     G.collapseStage = 2;
     toast('🟥 THE COLLAPSE HAS BEGUN — it never stops. DIVE!', 3600); AudioSys.deepBoom();
   }
@@ -3997,12 +3999,12 @@ function updateSurvival(dt){
   // until a guardian floor (10, 20, 30, ...), then HOLDS while you fight
   // the boss — and only resumes once you descend past that floor.
   const onBossFloor = G.floor > 0 && G.floor % 10 === 0;
-  if (onBossFloor && G.time >= S.collapseStart){
+  if (collapseOn && onBossFloor && G.time >= S.collapseStart){
     const holdY = -((G.floor - 1) * 40) + 16; // parked at the entrance: crush band starts above the ceiling, whole floor is safe
     if (G.collapseY < holdY) G.collapseY = holdY; // never crush a boss fight
     if (!G.collapseHeld){ G.collapseHeld = true; toast('🟥 THE COLLAPSE HOLDS — finish this floor\'s guardian!', 3400); }
     G.crushT = 0; G.collapseMoving = false;
-  } else if (G.time >= S.collapseStart){
+  } else if (collapseOn && G.time >= S.collapseStart){
     if (G.collapseHeld){ G.collapseHeld = false; toast('🟥 THE COLLAPSE RESUMES — DIVE!', 3000); AudioSys.deepBoom(); }
     // Per-floor grace (Akmal 19 Nov): after a floor change the Collapse
     // sits at the new floor's ceiling for 2 minutes while the player
@@ -4056,7 +4058,7 @@ function updateSurvival(dt){
   // headroom in metres once it is moving.
   if (!G.colHud) G.colHud = { row: document.getElementById('collapse-row'), txt: document.getElementById('collapse-txt') };
   if (G.colHud.row){
-    if (G.time < S.collapseStart - 30) G.colHud.row.style.display = 'none';
+    if (!collapseOn || G.time < S.collapseStart - 30) G.colHud.row.style.display = 'none';
     else {
       G.colHud.row.style.display = '';
       if (G.time < S.collapseStart){ const s = Math.ceil(S.collapseStart - G.time); G.colHud.txt.textContent = 'IN ' + s + 's'; G.colHud.row.style.color = s <= 10 ? '#ff5566' : '#ffb84d'; }
@@ -4370,7 +4372,7 @@ function animate(){
   }
   // collapse vignette: red edges close in as the Collapse nears the player
   if (colVigEl){
-    const cTgt = (uiState === 'playing' && G && !G.over && G.mode === 'survival' && player && !G.collapseHeld && G.time >= CONFIG.survival.collapseStart - 5)
+    const cTgt = (uiState === 'playing' && G && !G.over && G.mode === 'survival' && player && !G.collapseHeld && G.diffId !== 'calm' && G.time >= CONFIG.survival.collapseStart - 5)
       ? Math.max(0, 0.6 * (1 - Math.max(0, G.collapseY - player.group.position.y) / 60)) * (0.8 + 0.2 * Math.sin(performance.now() * 0.01)) : 0;
     colVigCur += (cTgt - colVigCur) * Math.min(1, dt * 5);
     colVigEl.style.opacity = colVigCur.toFixed(3);
