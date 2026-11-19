@@ -1068,6 +1068,7 @@ const STR_ZH = {
   'Wallet: 🪙 <span class="coins" id="title-coins">0</span> · Best depth <span id="title-depth">—</span> · Best survival <span id="title-time">—</span>': '钱包： 🪙 <span class="coins" id="title-coins">0</span> · 最深深度 <span id="title-depth">—</span> · 最佳生存 <span id="title-time">—</span>',
   'Powered by Aholo Lux3D': '由 Aholo Lux3D 驱动',
   '📱 Touch controls are on — left stick to steer, drag the right side to look, on-screen buttons to ping, fire and boost.': '📱 触控已开启——左摇杆操舵，拖动右侧视角，屏幕按钮探测、开火与加速。',
+  '💻 For the optimal experience — mouse steering, keyboard controls, the full-size view — play on PC. Mobile works, but PC is the full dive.': '💻 为获得最佳体验——鼠标操舵、键盘操控、完整尺寸画面——请在电脑上游玩。手机可以玩，但电脑才是完整的深潜体验。',
   'EXPEDITION — SELECT ZONE': '探险 —— 选择区域', '← BACK': '← 返回', '← BACK TO HANGAR': '← 返回机库',
   'Click a sub to preview it · drag on the water to rotate · scroll to zoom': '点击潜艇预览 · 拖动水面旋转 · 滚轮缩放',
   'UPGRADES': '升级', 'SUPPLIES': '补给',
@@ -4517,7 +4518,7 @@ function wire(){
   buildHangarScene();
   setUI('title');
   applyLang();
-  if (('ontouchstart' in window) || (window.matchMedia && matchMedia('(pointer: coarse)').matches)) $('touch-note').style.display = '';
+  if (('ontouchstart' in window) || (window.matchMedia && matchMedia('(pointer: coarse)').matches)) { $('touch-note').style.display = ''; $('pc-note').style.display = ''; }
   animate();
 })();
 
