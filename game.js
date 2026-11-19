@@ -261,6 +261,7 @@ const AudioSys = {
   coin(){ this.tone(1318, 0.07, 'square', 0.05); this.tone(1760, 0.09, 'square', 0.05, null, 0.06); },
   torp(){ this.noiseBurst(0.35, 500, 0.16); this.tone(160, 0.3, 'sawtooth', 0.05, 60); },
   boom(){ this.noiseBurst(0.6, 240, 0.3); this.tone(70, 0.55, 'sine', 0.22, 30); },
+  deepBoom(){ this.tone(64, 1.7, 'sine', 0.5, 26); this.tone(38, 2.1, 'sine', 0.34, 24, 0.05); this.noiseBurst(1.1, 130, 0.2); },
   emp(){ this.tone(1200, 0.5, 'sine', 0.1, 90); this.noiseBurst(0.4, 1600, 0.08); },
   hit(){ this.tone(110, 0.22, 'sawtooth', 0.16, 55); this.noiseBurst(0.18, 700, 0.12); },
   gate(){ this.tone(523, 0.16, 'sine', 0.1); this.tone(784, 0.22, 'sine', 0.1, null, 0.13); },
@@ -3547,7 +3548,7 @@ function updateSurvival(dt){
   }
   if (G.collapseStage === 1 && G.time >= S.collapseStart){
     G.collapseStage = 2;
-    toast('🟥 THE COLLAPSE HAS BEGUN — it never stops. DIVE!', 3600);
+    toast('🟥 THE COLLAPSE HAS BEGUN — it never stops. DIVE!', 3600); AudioSys.deepBoom();
   }
   // Boss-floor hold (Akmal 19 Nov): the Collapse rides down with you
   // until a guardian floor (10, 20, 30, ...), then HOLDS while you fight
@@ -3559,7 +3560,7 @@ function updateSurvival(dt){
     if (!G.collapseHeld){ G.collapseHeld = true; toast('🟥 THE COLLAPSE HOLDS — finish this floor\'s guardian!', 3400); }
     G.crushT = 0;
   } else if (G.time >= S.collapseStart){
-    if (G.collapseHeld){ G.collapseHeld = false; toast('🟥 THE COLLAPSE RESUMES — DIVE!', 3000); }
+    if (G.collapseHeld){ G.collapseHeld = false; toast('🟥 THE COLLAPSE RESUMES — DIVE!', 3000); AudioSys.deepBoom(); }
     // Per-floor grace (Akmal 19 Nov): after a floor change the Collapse
     // sits at the new floor's ceiling for 2 minutes while the player
     // hunts; then it creeps down bit by bit as pressure. Warnings fire
@@ -3568,7 +3569,7 @@ function updateSurvival(dt){
     const graceLeft = 120 - (G.time - (G.floorEnterT || 0));
     const inGrace = gateSealed && graceLeft > 0;
     if (gateSealed && graceLeft <= 10 && graceLeft > 0 && !G.gracePreWarned){ G.gracePreWarned = true; toast('⚠ THE COLLAPSE MOVES IN ' + Math.ceil(graceLeft) + 's — wrap up this floor!', 3000); AudioSys.tone(660, 0.15, 'sine', 0.07); }
-    if (gateSealed && !inGrace && !G.graceWarned){ G.graceWarned = true; toast('🟥 THE COLLAPSE IS ON THE MOVE — it creeps down this floor. Finish up and DIVE!', 3800); AudioSys.tone(98, 0.8, 'sawtooth', 0.09, 65); }
+    if (gateSealed && !inGrace && !G.graceWarned){ G.graceWarned = true; toast('🟥 THE COLLAPSE IS ON THE MOVE — it creeps down this floor. Finish up and DIVE!', 3800); AudioSys.deepBoom(); }
     let speed = S.collapseBase * 0.65 + G.stratum * 0.2 + G.time / 600; // slowed 19 Nov — gated floors take longer than the old pace assumed
     if (gateSealed && !inGrace) speed = Math.min(speed, 0.35); // the bit-by-bit creep
     G.collapseY -= speed * dt;
