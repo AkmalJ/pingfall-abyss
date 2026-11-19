@@ -1262,7 +1262,7 @@ function newG(mode){
     floorCrystals:0, survGate:null, gateWarnT:0,
     cannonHeld:false, cannonHeat:0, cannonLock:false, cannonFireT:0, bolts:[],
     // survival director
-    stratum:0, floor:0, maxDepth:0, spawnT:6, spawnInterval:CONFIG.survival.spawnStart,
+    stratum:0, floor:1, maxDepth:0, spawnT:6, spawnInterval:CONFIG.survival.spawnStart,
     nextMinuteAt:60, nextAncientAt:CONFIG.survival.ancientEvery,
     bandY:0, collapseY:46, collapseMesh:null, collapseStage:0, crushT:0, pendingBoss:null, bossWarnAt:-1, bossSpawnAt:-1, wardenAlive:null, trio:null };
 }
@@ -1394,7 +1394,7 @@ function spawnHunter(scene, typeId, pos, opts = {}){
 // are rendered ONLY while the player is on that floor. visible=false sits
 // above the reveal system: a ping on floor N can never reveal floor N±1's
 // collectibles. State (taken/value/quota) is untouched — visibility only.
-function survFloorOf(y){ return Math.floor(Math.max(0, -y) / CONFIG.survival.floorDepth); }
+function survFloorOf(y){ return Math.floor(Math.max(0, -y) / CONFIG.survival.floorDepth) + 1; }
 function survCullCollectibles(){
   if (!G || G.mode !== 'survival') return;
   for (const c of G.crystals) if (!c.taken && c.floor !== undefined) c.group.visible = (c.floor === G.floor);
@@ -2272,7 +2272,7 @@ const FLOOR_THEMES = [
 // floor-enter toast names the theme the band actually generated.
 const STRATUM_SIGNATURE = ['wreck', 'kelp', 'vent', 'ruins', 'wreck', 'vent'];
 function floorTheme(f){
-  const s = Math.floor(f / 10) % STRATUM_SIGNATURE.length;
+  const s = Math.floor((f - 1) / 10) % STRATUM_SIGNATURE.length;
   const h = Math.abs(Math.sin(f * 127.1 + s * 311.7) * 43758.5453) % 1;
   if (h < 0.55) return FLOOR_THEMES.find(t => t.id === STRATUM_SIGNATURE[s]);
   return FLOOR_THEMES[Math.floor(h * FLOOR_THEMES.length) % FLOOR_THEMES.length];
@@ -2652,7 +2652,7 @@ function startSurvival(diffId){
   for (let i=0;i<4;i++) G.schools.push(buildFishSchool(gameScene, new THREE.Vector3(rand(-80, 80), rand(-40, -10), rand(-80, 80))));
   for (let i=0;i<5;i++) G.drifters.push(buildDrifterFish(gameScene)); // ambient deep-sea passers-by (decoration only)
   ensureBands();
-  spawnSurvivalGate(0);
+  spawnSurvivalGate(1);
   document.documentElement.style.setProperty('--accent', hexCss(accentHex(SAVE.sub)));
   setUI('playing');
   updateObjective();
@@ -3284,7 +3284,7 @@ function spawnSurvivalGate(f){
   }
   const S = CONFIG.survival;
   const a = rand(0, Math.PI * 2), r = rand(26, 62);
-  const pos = new THREE.Vector3(Math.cos(a) * r, -(f + 1) * S.floorDepth + 5, Math.sin(a) * r);
+  const pos = new THREE.Vector3(Math.cos(a) * r, -f * S.floorDepth + 5, Math.sin(a) * r);
   // Seabed disc at this floor's base plane with the dive-through hole exactly
   // at the gate (the gate is NOT at the shaft centre — r 26–62 — so the hole
   // follows it). Visual only: the barrier clamp already stops the player at
@@ -3294,7 +3294,7 @@ function spawnSurvivalGate(f){
   discShape.holes.push(discHole);
   const discGeo = new THREE.ShapeGeometry(discShape, 28); discGeo.rotateX(-Math.PI / 2);
   const disc = new THREE.Mesh(discGeo, SEABED_MAT);
-  disc.position.set(pos.x, -(f + 1) * S.floorDepth + 0.15, pos.z);
+  disc.position.set(pos.x, -f * S.floorDepth + 0.15, pos.z);
   gameScene.add(registerReveal(disc, { min: 0.24 }));
   const gate = spawnGate(gameScene, pos);
   gate.group.rotation.x = Math.PI / 2; // ring lies flat — you dive through it
@@ -3322,7 +3322,7 @@ function updateSurvivalGate(){
     updateObjective();
   }
   if (!sg.open){
-    const boundY = -(G.floor + 1) * S.floorDepth, pp = player.group.position;
+    const boundY = -G.floor * S.floorDepth, pp = player.group.position;
     if (pp.y < boundY + 3){
       pp.y = boundY + 3;
       if (player.vel.y < 0) player.vel.y = Math.abs(player.vel.y) * 0.25; // pressure current shoves you back up
@@ -3341,8 +3341,8 @@ function updateSurvivalGate(){
   // a deeper floor, the current seals the shaft behind you — you cannot
   // rise back into the floor above. Mirrors the locked-gate clamp below:
   // same 3 m margin, same shove, so the seal reads as water, not a wall.
-  if (G.floor > 0){
-    const ceilY = -G.floor * S.floorDepth, pp = player.group.position;
+  if (G.floor > 1){
+    const ceilY = -(G.floor - 1) * S.floorDepth, pp = player.group.position;
     if (pp.y > ceilY - 3){
       pp.y = ceilY - 3;
       if (player.vel.y > 0) player.vel.y = -Math.abs(player.vel.y) * 0.25; // sealed current shoves you back down
@@ -3453,35 +3453,43 @@ function onStratumCross(newStratum, floor){
   bankCoins(Math.round(CONFIG.econ.stratumBonus * G.diff.mult));
   toast('▼ ' + st.name + ' — FLOOR ' + floor, 3200);
   updateObjective();
-  if (floor % CONFIG.trio.everyFloors === 0){
-    if (!G.trio && !G.pendingBoss){
-      G.pendingBoss = { kind: 'trio', milestone: floor, warn: '⚠ FLOOR ' + floor + ' — THE THREE GUARDIANS stir below…' };
-      G.bossWarnAt = G.time + 0.5; G.bossSpawnAt = G.time + CONFIG.trio.warnBefore; G.bossWarned = false;
-    }
-  } else if (!G.wardenAlive && !G.pendingBoss && !G.trio){
-    G.pendingBoss = { kind: 'warden', stratum: newStratum, warn: '⚠ Something massive stirs below — a STRATUM WARDEN approaches…' };
-    G.bossWarnAt = G.time + 0.5; G.bossSpawnAt = G.time + CONFIG.warden.warnBefore; G.bossWarned = false;
-  }
+  // Bosses are no longer scheduled here: since the floor rebase the
+  // guardian lives ON floor 10/20/30... (the last floor of the stratum
+  // BELOW this one) and is scheduled on entry in updateSurvival — by the
+  // time this new stratum opens (floor 11/21...) it is already dead.
   // (No draft on stratum cross any more — the Warden/Guardians kill grants it.)
 }
 function updateSurvival(dt){
   const S = CONFIG.survival, pos = player.group.position;
   const depth = Math.max(0, -pos.y);
   G.maxDepth = Math.max(G.maxDepth, depth);
-  const newFloor = Math.floor(depth / S.floorDepth);
+  const newFloor = Math.floor(depth / S.floorDepth) + 1;
   if (newFloor > G.floor){
     G.floor = newFloor;
     G.spawnInterval = Math.max(S.spawnMin, G.spawnInterval * 0.94); // deeper floors breed denser hunters
     G.floorCrystals = 0; // the descent-gate quota counts crystals collected ON the new floor
-    const newStratum = Math.floor(newFloor / S.floorsPerStratum);
+    const newStratum = Math.floor((newFloor - 1) / S.floorsPerStratum);
     if (newStratum > G.stratum) onStratumCross(newStratum, newFloor);
     // Descent boon draft on odd multiples of 5 (floors 5, 15, 25, …) — the
     // old 60 s timer draft and the stratum-cross draft are gone; boss kills
     // (Warden / Three Guardians) still grant their draft as the boss reward.
+    // Guardian floors (Akmal 19 Nov): the boss lives ON floor 10/20/30...
+    // and its gate stays sealed until it dies — schedule it on entry.
+    if (survIsBossFloor(newFloor)){
+      if (survIsTrioFloor(newFloor)){
+        if (!G.trio && !G.pendingBoss){
+          G.pendingBoss = { kind: 'trio', milestone: newFloor, warn: '⚠ FLOOR ' + newFloor + ' — THE THREE GUARDIANS guard this floor. Kill them to open the gate!' };
+          G.bossWarnAt = G.time + 0.5; G.bossSpawnAt = G.time + CONFIG.trio.warnBefore; G.bossWarned = false;
+        }
+      } else if (!G.wardenAlive && !G.pendingBoss && !G.trio){
+        G.pendingBoss = { kind: 'warden', stratum: newFloor / 10, warn: '⚠ A STRATUM WARDEN guards this floor — kill it to open the descent gate!' };
+        G.bossWarnAt = G.time + 0.5; G.bossSpawnAt = G.time + CONFIG.warden.warnBefore; G.bossWarned = false;
+      }
+    }
     if (newFloor % 10 === 5) openBoonDraft();
     // Name the floor's theme on entry, expedition-style (skipped on stratum
     // floors — the stratum/boss announcement owns those).
-    if (newFloor % 10 !== 0){ const th = floorTheme(newFloor); toast(th.icon + ' FLOOR ' + newFloor + ' — ' + th.name, 1900); }
+    if (newFloor % 10 !== 0 && (newFloor - 1) % 10 !== 0){ const th = floorTheme(newFloor); toast(th.icon + ' FLOOR ' + newFloor + ' — ' + th.name, 1900); }
     updateObjective();
   }
   // Depth darkness gradient (Akmal 19 Nov): bright shallows, crushing dark
@@ -3536,7 +3544,7 @@ function updateSurvival(dt){
   // the boss — and only resumes once you descend past that floor.
   const onBossFloor = G.floor > 0 && G.floor % 10 === 0;
   if (onBossFloor && G.time >= S.collapseStart){
-    const holdY = -(G.floor * 40) + 24;
+    const holdY = -((G.floor - 1) * 40) + 24;
     if (G.collapseY < holdY) G.collapseY = holdY; // never crush a boss fight
     if (!G.collapseHeld){ G.collapseHeld = true; toast('🟥 THE COLLAPSE HOLDS — finish this floor\'s guardian!', 3400); }
     G.crushT = 0;
