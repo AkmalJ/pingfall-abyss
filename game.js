@@ -16,9 +16,10 @@ const CONFIG = {
   assetYawFix: { 'hunter': -Math.PI / 2 }, // per-model GLB facing fix, applied on the loader wrap so it survives the movement lookAt. 'hunter' was authored head-at-+X (angler lure + jaw at +X, tail fin at -X — verified against the geometry), so -90° puts its face on +Z like the movement/swim code assumes. 'hunter-brute' (head +Z) and 'hunter-sentry' (face +Z) verified correct as authored.
 
   // ---- sonar / noise / battery ----
-  sonar: { baseRadius: 95, waveSpeed: 150, revealDur: 3.4, pingCost: 15,
+  sonar: { baseRadius: 95, waveSpeed: 150, revealDur: 3.4, pingCd: 30,
            pingNoiseRadiusMul: 1.15, noiseDecay: 16, engineHearBase: 30 },
-  batteryRegen: 0.5, // 2.4 -> 0.8 -> 0.5 (Akmal 19 Nov: make battery scarce so the now floor-wide crystal ping cannot be spammed); a 15-cost ping takes 30 s to earn back, a +30 cell/cache is worth exactly 2 pings
+  batteryRegen: 3.5, // stamina regen (Akmal 19 Nov redesign: battery no longer powers the ping — it is BOOST stamina; the ping runs on a flat 30 s cooldown instead)
+  boostMul: 1.7, boostDrain: 7, boostRegenDelay: 0.8, // Shift boost: +70% speed, 7 stamina/s (≈14 s from full), regen starts 0.8 s after release
   emp: { cooldown: 20 },
   decoy: { life: 12, radius: 95, pulse: 0.6 },
 
@@ -97,7 +98,7 @@ const CONFIG = {
     sonar:   { name:'SONAR+',   prices:[100,200,350], radius:[1,1.25,1.5,1.8], echo:[1,1,1.5,2],
                blurb:t=> t===0?'Ping radius +25%': t===1?'Radius +50%, echoes 1.5× longer':'Radius +80%, echoes 2× longer' },
     battery: { name:'BATTERY+', prices:[100,200,350], cap:[1,1.3,1.6,2.0], cost:[1,1,0.9,0.8],
-               blurb:t=> t===0?'Capacity +30%': t===1?'Capacity +60%, ping −10% cost':'Capacity +100%, ping −20% cost' },
+               blurb:t=> t===0?'Capacity +30%': t===1?'Capacity +60%, boost drains 10% less':'Capacity +100%, boost drains 20% less' },
     hull:    { name:'HULL+',    prices:[100,200,350], hp:[1,1.25,1.5,2.0], dmg:[1,1,0.75,0.6],
                blurb:t=> t===0?'Hull +25%': t===1?'Hull +50%, damage taken −25%':'Hull +100%, damage taken −40%' },
   },
@@ -168,7 +169,7 @@ const CONFIG = {
   // ---- boons (survival draft) ----
   boons: [
     { id:'repair', icon:'🛠', name:'Field Repair',  desc:'Restore 30 hull right now.' },
-    { id:'cell',   icon:'🔋', name:'Abyssal Cell',  desc:'+50 battery, +20 max battery this dive.' },
+    { id:'cell',   icon:'🔋', name:'Abyssal Cell',  desc:'+50 boost stamina, +20 max stamina this dive.' },
     { id:'decoys', icon:'📡', name:'Decoy Cache',   desc:'+2 sonar decoys.' },
     { id:'torps',  icon:'🐚', name:'Torpedo Cache', desc:'+3 torpedoes.' },
     { id:'sonar',  icon:'🌐', name:'Wide Array',    desc:'Sonar radius +25% this dive.' },
@@ -205,7 +206,7 @@ function derived(subId){
     maxBatt: Math.round(s.battery * CONFIG.upgrades.battery.cap[u.battery]),
     sonarR: CONFIG.sonar.baseRadius * s.sonarMul * CONFIG.upgrades.sonar.radius[u.sonar],
     echoMul: CONFIG.upgrades.sonar.echo[u.sonar],
-    pingCost: CONFIG.sonar.pingCost * CONFIG.upgrades.battery.cost[u.battery],
+    boostDrainMul: CONFIG.upgrades.battery.cost[u.battery],
     dmgMul: CONFIG.upgrades.hull.dmg[u.hull] };
 }
 function accentHex(subId){ const cid = SAVE.subColor[subId] || 'teal'; const c = CONFIG.colors.find(x=>x.id===cid); return c ? c.hex : 0x2ee6c8; }
@@ -1283,7 +1284,7 @@ window.addEventListener('wheel', e => {
 let G = null, player = null, gameScene = null;
 function newG(mode){
   return { mode, time:0, over:false, zone:null, diff:null, diffId:null,
-    crystalsGot:0, crystalsTotal:0, coinsRun:0, empCd:0, noise:0, noisePulse:0,
+    crystalsGot:0, crystalsTotal:0, coinsRun:0, empCd:0, noise:0, noisePulse:0, pingReadyAt:0, boosting:false, boostRegenAt:0,
     gateOpen:false, missionDone:false, surviveT:0, nestsDown:0, rescued:false,
     closeCalls:0, kills:0, torps:0, decoys:0, hintStep:-1, camShake:0,
     hunters:[], crystals:[], jellies:[], mines:[], nests:[], fired:[], schools:[], waves:[], fx:[], drifters:[],
@@ -2723,9 +2724,8 @@ function hearNoise(h, pos, amt, kind){
 }
 function doPing(){
   if (!player || !G || G.over || uiState !== 'playing') return;
-  const cost = player.d.pingCost;
-  if (player.batt < cost){ toast('🔋 Battery too low to ping — it recharges slowly'); return; }
-  player.batt -= cost;
+  if (G.time < (G.pingReadyAt || 0)){ toast('📡 Sonar recharging — ' + Math.ceil(G.pingReadyAt - G.time) + 's', 1200); return; }
+  G.pingReadyAt = G.time + CONFIG.sonar.pingCd;
   G.pinged = true;
   G.noisePulse = 100;
   AudioSys.ping();
@@ -3181,7 +3181,7 @@ function updateHazardsAndPickups(dt){
       const v = Math.round(rand(CONFIG.econ.cacheMin, CONFIG.econ.cacheMax) * (G.diff ? G.diff.mult : 1));
       bankCoins(v); player.batt = Math.min(player.d.maxBatt + G.boon.battMax, player.batt + 30);
       player.hull = Math.min(player.d.maxHull, player.hull + CONFIG.econ.cacheHull); // caches are the in-dive hull source — without this, hull only ever goes down
-      toast('📦 Supply cache: +' + CONFIG.econ.cacheHull + ' hull, +battery, +🪙 ' + v);
+      toast('📦 Supply cache: +' + CONFIG.econ.cacheHull + ' hull, +boost, +🪙 ' + v);
       AudioSys.coin();
     }
   }
@@ -3205,7 +3205,7 @@ function updateHazardsAndPickups(dt){
       p.taken = true; removeEntity(p.group);
       if (p.kind === 'cell'){
         player.batt = Math.min(player.d.maxBatt + G.boon.battMax, player.batt + CONFIG.econ.cellBatt);
-        toast('🔋 Battery cell: +' + CONFIG.econ.cellBatt + ' battery');
+        toast('🔋 Battery cell: +' + CONFIG.econ.cellBatt + ' boost');
         AudioSys.tone(740, 0.1, 'sine', 0.08);
       } else {
         player.hull = Math.min(player.d.maxHull, player.hull + CONFIG.econ.patchHull);
@@ -3786,7 +3786,9 @@ function updatePlayer(dt){
   if (keys['KeyA']) strafe += 0.75;
   if (keys['KeyR']) vert += 1;   // direct rise (F is torpedo, Space is ping — R/C were free)
   if (keys['KeyC']) vert -= 1;   // direct sink
-  const maxSp = p.d.def.speed * G.boon.speedMul, accel = 46;
+  const wantBoost = (keys['ShiftLeft'] || keys['ShiftRight']) && (thrust !== 0 || strafe !== 0 || vert !== 0) && p.batt > 0.5;
+  G.boosting = !!wantBoost;
+  const maxSp = p.d.def.speed * G.boon.speedMul * (G.boosting ? CONFIG.boostMul : 1), accel = 46;
   p.vel.addScaledVector(fwd, thrust * accel * dt);
   p.vel.addScaledVector(right, strafe * accel * dt);
   p.vel.y += vert * accel * 0.7 * dt; // ~0.7x thrust rate, capped by the same max-speed clamp below
@@ -3853,13 +3855,15 @@ function updatePlayer(dt){
   g.lookAt(g.position.clone().add(fwd));
   g.rotateZ(roll);
   if (g.userData.spin) g.userData.spin.rotation.z -= dt * (2 + sp * 0.9);
-  p.batt = Math.min(p.d.maxBatt + G.boon.battMax, p.batt + CONFIG.batteryRegen * dt);
+  if (G.boosting){ p.batt = Math.max(0, p.batt - CONFIG.boostDrain * p.d.boostDrainMul * dt); G.boostRegenAt = G.time + CONFIG.boostRegenDelay; }
+  else if (G.time >= (G.boostRegenAt || 0)) p.batt = Math.min(p.d.maxBatt + G.boon.battMax, p.batt + CONFIG.batteryRegen * dt);
   const speedFrac = maxSp > 0 ? sp / maxSp : 0;
   G.noisePulse = Math.max(0, G.noisePulse - CONFIG.sonar.noiseDecay * dt);
   G.noise = clamp(G.noisePulse * 0.7 + speedFrac * 55 * p.d.def.noiseMul, 0, 100);
+  if (G.boosting) G.noise = clamp(G.noise + 25, 0, 100);
   // engine hearing rides the same speedFrac × noiseMul product that drives the
   // NOISE meter: full thrust carries ~30–35 m, drifting idle is near-silent
-  const hearR = Math.min(35, CONFIG.sonar.engineHearBase * p.d.def.noiseMul * (0.05 + 0.95 * Math.pow(speedFrac, 1.6)));
+  const hearR = Math.min(52, CONFIG.sonar.engineHearBase * p.d.def.noiseMul * (0.05 + 0.95 * Math.pow(speedFrac, 1.6)) * (G.boosting ? 1.5 : 1));
   if (hearR > 4) for (const h of G.hunters){
     if (h.dead || h.type.hearing <= 0) continue;
     const d = h.group.position.distanceTo(g.position);
@@ -3868,6 +3872,8 @@ function updatePlayer(dt){
   const camTarget = g.position.clone().addScaledVector(fwd, -16);
   camTarget.y += 5.5;
   camera.position.lerp(camTarget, 1 - Math.exp(-5 * dt));
+  const fovT = G.boosting ? 75 : 66;
+  if (Math.abs(camera.fov - fovT) > 0.05){ camera.fov += (fovT - camera.fov) * (1 - Math.exp(-6 * dt)); camera.updateProjectionMatrix(); }
   if (G.camShake > 0){
     camera.position.x += rand(-1, 1) * G.camShake * 0.5;
     camera.position.y += rand(-1, 1) * G.camShake * 0.5;
@@ -3892,6 +3898,8 @@ function updateHUD(){
   const maxB = p.d.maxBatt + G.boon.battMax;
   $('batt-txt').textContent = Math.floor(p.batt) + ' / ' + maxB;
   $('m-batt').firstElementChild.style.width = clamp(p.batt / maxB * 100, 0, 100) + '%';
+  const pingEl = $('ping-txt');
+  if (pingEl){ const pc = Math.max(0, (G.pingReadyAt || 0) - G.time); pingEl.textContent = pc > 0 ? Math.ceil(pc) + 's' : 'READY'; }
   $('noise-txt').textContent = Math.round(G.noise) + '%';
   $('m-noise').firstElementChild.style.width = G.noise + '%';
   const heatRow = $('heat-row');

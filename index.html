@@ -119,10 +119,11 @@
   <div class="hudbox" id="hud-tl">
     <div class="lbl"><span>HULL</span><span id="hull-txt"></span></div>
     <div class="meter" id="m-hull"><i style="width:100%"></i></div>
-    <div class="lbl"><span>BATTERY</span><span id="batt-txt"></span></div>
+    <div class="lbl"><span>BOOST</span><span id="batt-txt"></span></div>
     <div class="meter" id="m-batt"><i style="width:100%"></i></div>
     <div class="lbl"><span>NOISE</span><span id="noise-txt"></span></div>
     <div class="meter" id="m-noise"><i style="width:0%"></i></div>
+    <div class="lbl"><span>SONAR</span><span id="ping-txt"></span></div>
     <div id="heat-row" style="opacity:.25;transition:opacity .2s">
       <div class="lbl"><span>PULSE HEAT</span><span id="heat-txt"></span></div>
       <div class="meter" id="m-heat"><i style="width:0%"></i></div>
@@ -199,7 +200,8 @@
       <tr><td><span class="kbd">A</span>/<span class="kbd">D</span></td><td>Strafe</td></tr>
       <tr><td><span class="kbd">R</span>/<span class="kbd">C</span></td><td>Rise / sink (direct vertical thrust)</td></tr>
       <tr><td><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span></td><td>Turn / pitch (when pointer is not locked)</td></tr>
-      <tr><td><span class="kbd">SPACE</span></td><td>Sonar ping — reveals the world, costs battery, makes noise</td></tr>
+      <tr><td><span class="kbd">SPACE</span></td><td>Sonar ping — reveals the world, 30 s cooldown, makes noise</td></tr>
+      <tr><td><span class="kbd">SHIFT</span></td><td>Boost — +70% speed while held, drains the BOOST meter, much louder</td></tr>
       <tr><td><span class="kbd">Hold Click</span></td><td>Pulse cannon — rapid bolts, no ammo but it OVERHEATS (watch the PULSE HEAT bar)</td></tr>
       <tr><td><span class="kbd">F</span></td><td>Fire torpedo — heavy damage, limited stock</td></tr>
       <tr><td><span class="kbd">Q</span></td><td>Drop sonar decoy — hunters chase its noise instead of you</td></tr>
