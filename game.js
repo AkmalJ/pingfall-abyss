@@ -1264,7 +1264,7 @@ function newG(mode){
     // survival director
     stratum:0, floor:1, maxDepth:0, spawnT:6, spawnInterval:CONFIG.survival.spawnStart,
     nextMinuteAt:60, nextAncientAt:CONFIG.survival.ancientEvery,
-    bandY:0, collapseY:46, collapseMesh:null, collapseStage:0, crushT:0, pendingBoss:null, bossWarnAt:-1, bossSpawnAt:-1, wardenAlive:null, trio:null };
+    bandY:0, collapseY:46, collapseMesh:null, collapseStage:0, crushT:0, floorEnterT:0, graceWarned:false, gracePreWarned:false, pendingBoss:null, bossWarnAt:-1, bossSpawnAt:-1, wardenAlive:null, trio:null };
 }
 function removeEntity(root){
   if (gameScene) gameScene.remove(root);
@@ -3475,6 +3475,7 @@ function updateSurvival(dt){
   const newFloor = Math.floor(depth / S.floorDepth) + 1;
   if (newFloor > G.floor){
     G.floor = newFloor;
+    G.floorEnterT = G.time; G.graceWarned = false; G.gracePreWarned = false; // the Collapse parks at this floor's ceiling for 2 min (Akmal 19 Nov)
     G.spawnInterval = Math.max(S.spawnMin, G.spawnInterval * 0.94); // deeper floors breed denser hunters
     G.floorCrystals = 0; // the descent-gate quota counts crystals collected ON the new floor
     const newStratum = Math.floor((newFloor - 1) / S.floorsPerStratum);
@@ -3559,7 +3560,17 @@ function updateSurvival(dt){
     G.crushT = 0;
   } else if (G.time >= S.collapseStart){
     if (G.collapseHeld){ G.collapseHeld = false; toast('🟥 THE COLLAPSE RESUMES — DIVE!', 3000); }
-    const speed = S.collapseBase * 0.65 + G.stratum * 0.2 + G.time / 600; // slowed 19 Nov — gated floors take longer than the old pace assumed
+    // Per-floor grace (Akmal 19 Nov): after a floor change the Collapse
+    // sits at the new floor's ceiling for 2 minutes while the player
+    // hunts; then it creeps down bit by bit as pressure. Warnings fire
+    // 10 s before it moves and again when it starts moving.
+    const gateSealed = !!(G.survGate && G.survGate.floor === G.floor && !G.survGate.open);
+    const graceLeft = 120 - (G.time - (G.floorEnterT || 0));
+    const inGrace = gateSealed && graceLeft > 0;
+    if (gateSealed && graceLeft <= 10 && graceLeft > 0 && !G.gracePreWarned){ G.gracePreWarned = true; toast('⚠ THE COLLAPSE MOVES IN ' + Math.ceil(graceLeft) + 's — wrap up this floor!', 3000); AudioSys.tone(660, 0.15, 'sine', 0.07); }
+    if (gateSealed && !inGrace && !G.graceWarned){ G.graceWarned = true; toast('🟥 THE COLLAPSE IS ON THE MOVE — it creeps down this floor. Finish up and DIVE!', 3800); AudioSys.tone(98, 0.8, 'sawtooth', 0.09, 65); }
+    let speed = S.collapseBase * 0.65 + G.stratum * 0.2 + G.time / 600; // slowed 19 Nov — gated floors take longer than the old pace assumed
+    if (gateSealed && !inGrace) speed = Math.min(speed, 0.35); // the bit-by-bit creep
     G.collapseY -= speed * dt;
     // Sealed-gate hold (Akmal 19 Nov): while this floor's gate is sealed
     // the Collapse waits ABOVE THE FLOOR'S CEILING (entrance + 16 m, so
@@ -3567,14 +3578,13 @@ function updateSurvival(dt){
     // huntable, and the plane only comes down once the gate opens. (The
     // first version parked mid-floor and crushed all but the bottom few
     // metres of the floor the player still had to work.)
-    const gateSealed = !!(G.survGate && G.survGate.floor === G.floor && !G.survGate.open);
     if (gateSealed){
-      const gateHoldY = -((G.floor - 1) * 40) + 16;
+      const gateHoldY = inGrace ? -((G.floor - 1) * 40) + 16 : -(G.floor * 40) + 20; // grace: entrance park; after: bottom guard (gate-pinned player stays outside the crush band)
       if (G.collapseY < gateHoldY){
         G.collapseY = gateHoldY;
-        if (!G.gateHeld){ G.gateHeld = true; toast('🟥 THE COLLAPSE WAITS ABOVE THE SEALED GATE — open it and DIVE!', 3400); }
+        if (!G.gateHeld){ G.gateHeld = true; if (inGrace) toast('🟥 THE COLLAPSE WAITS ABOVE THE SEALED GATE — open it and DIVE!', 3400); }
         G.crushT = 0;
-      }
+      } else if (!inGrace) G.gateHeld = false; // creeping — the HUD shows the real distance, not HELD
     } else G.gateHeld = false;
     if (pos.y > G.collapseY - 14){
       G.crushT = (G.crushT || 0) + dt;
@@ -3600,7 +3610,7 @@ function updateSurvival(dt){
       G.colHud.row.style.display = '';
       if (G.time < S.collapseStart){ const s = Math.ceil(S.collapseStart - G.time); G.colHud.txt.textContent = 'IN ' + s + 's'; G.colHud.row.style.color = s <= 10 ? '#ff5566' : '#ffb84d'; }
       else if (G.collapseHeld){ G.colHud.txt.textContent = 'HELD — BOSS FIGHT'; G.colHud.row.style.color = '#7fe0a8'; }
-      else if (G.gateHeld){ G.colHud.txt.textContent = 'HELD — GATE SEALED'; G.colHud.row.style.color = '#7fe0a8'; }
+      else if (G.gateHeld){ const gl2 = 120 - (G.time - (G.floorEnterT || 0)), sealed2 = !!(G.survGate && !G.survGate.open); G.colHud.txt.textContent = (sealed2 && gl2 > 0) ? 'HELD — GATE SEALED · MOVES IN ' + Math.ceil(gl2) + 's' : 'HELD — GATE SEALED'; G.colHud.row.style.color = (sealed2 && gl2 <= 15 && gl2 > 0) ? '#ffb84d' : '#7fe0a8'; }
       else { const d = Math.max(0, Math.round(G.collapseY - pos.y)); G.colHud.txt.textContent = d + ' m ABOVE YOU'; G.colHud.row.style.color = d < 20 ? '#ff3344' : (d < 50 ? '#ffb84d' : '#7fe0a8'); }
     }
   }
